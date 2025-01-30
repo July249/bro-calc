@@ -20,8 +20,6 @@ const config: Configuration = {
     extensions: ['.tsx', '.ts', '.js'],
     alias: {
       '@': path.resolve(__dirname, 'src'),
-      '@test': path.resolve(__dirname, 'src/test'),
-      '@core': path.resolve(__dirname, 'src/core'),
     },
   },
   output: {

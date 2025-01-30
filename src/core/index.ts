@@ -5,31 +5,57 @@ interface Decimal {
 }
 
 export class BroCalc {
-  private scale: bigint
-  private precision: number
   private base: number
   private logBase: number
   private karatsubaThreshold: number
   private maxDigits: number
-  private expLimit: number
   private num: Decimal
 
-  constructor(precision: number = 2) {
-    this.precision = precision
-    this.scale = BigInt(10 ** precision)
+  constructor(value: number | string = 0) {
     this.base = 1e7
     this.logBase = 7
-    this.karatsubaThreshold = 30
     this.maxDigits = 1e9
-    this.expLimit = 9e15
-    this.num = {
-      d: [],
-      e: 0,
-      s: 1,
-    }
+    this.karatsubaThreshold = 30
+    this.num = this.parseInput(value)
   }
 
-  add(x: Decimal, y: Decimal): Decimal {
+  // ================================ Public Methods ================================
+
+  add(value: string | number): Decimal {
+    const o = this.parseInput(value)
+    const result = this.calculateAdd(this.num, o)
+    this.num = result
+
+    return this.num
+  }
+
+  subtract(value: string | number): Decimal {
+    const o = this.parseInput(value)
+    const result = this.calculateSubtract(this.num, o)
+    this.num = result
+
+    return this.num
+  }
+
+  multiply(value: number | string): Decimal {
+    const o = this.parseInput(value)
+    const result = this.calculateMultiply(this.num, o)
+    this.num = result
+
+    return this.num
+  }
+
+  divide(value: number | string): Decimal {
+    const o = this.parseInput(value)
+    const result = this.calculateDivide(this.num, o)
+    this.num = result
+
+    return this.num
+  }
+
+  // ================================ Calculation Logic ================================
+
+  private calculateAdd(x: Decimal, y: Decimal): Decimal {
     if (!x.d || !y.d) {
       throw new Error('Invalid input')
     }
@@ -85,7 +111,7 @@ export class BroCalc {
     }
   }
 
-  subtract(x: Decimal, y: Decimal): Decimal {
+  private calculateSubtract(x: Decimal, y: Decimal): Decimal {
     // 뺄셈은 부호를 바꾼 덧셈으로 처리
     const negY = {
       d: y.d,
@@ -93,10 +119,10 @@ export class BroCalc {
       s: -y.s,
     }
 
-    return this.add(x, negY)
+    return this.calculateAdd(x, negY)
   }
 
-  multiply(x: Decimal, y: Decimal): Decimal {
+  private calculateMultiply(x: Decimal, y: Decimal): Decimal {
     if (!x.d || !y.d) {
       throw new Error('Invalid input')
     }
@@ -131,7 +157,7 @@ export class BroCalc {
     }
   }
 
-  divide(x: Decimal, y: Decimal): Decimal {
+  private calculateDivide(x: Decimal, y: Decimal): Decimal {
     if (!y.d || this.isZero(y)) throw new Error('Division by zero')
     if (!x.d) throw new Error('Invalid dividend')
 
@@ -139,10 +165,56 @@ export class BroCalc {
     const reciprocal = this.newtonRaphsonReciprocal(y)
 
     // x * (1/y) 계산
-    const result = this.multiply(x, reciprocal)
+    const result = this.calculateMultiply(x, reciprocal)
 
     // 정밀도 조정
-    return this.roundToPrecision(result, this.getPrecision(x, y))
+    return this.roundToPrecision(this.getPrecision())
+  }
+
+  // ================================ Utility ================================
+
+  private parseInput(value: number | string): Decimal {
+    // 입력값을 문자열로 변환
+    const str = value.toString()
+
+    // 부호 확인
+    let sign = 1
+    let numStr = str
+    if (str[0] === '-') {
+      sign = -1
+      numStr = str.slice(1)
+    } else if (str[0] === '+') {
+      numStr = str.slice(1)
+    }
+
+    // 소수점 처리
+    let e = 0
+    const dotIndex = numStr.indexOf('.')
+    if (dotIndex !== -1) {
+      numStr = numStr.replace('.', '')
+    }
+
+    // 앞뒤 불필요한 0 제거
+    numStr = numStr.replace(/^0+/, '')
+    if (numStr === '') numStr = '0'
+
+    // 7자리씩 끊어서 배열로 변환
+    const digits: number[] = []
+    for (let i = 0; i < numStr.length; i += this.logBase) {
+      const chunk = numStr.slice(i, i + this.logBase)
+      digits.push(parseInt(chunk, 10))
+    }
+
+    // 소수점이 있었다면 지수 계산
+    if (dotIndex !== -1) {
+      e = -(numStr.length - dotIndex)
+    }
+
+    return {
+      d: digits,
+      e: e,
+      s: sign,
+    }
   }
 
   private standardMultiply(xd: number[], yd: number[]): number[] {
@@ -165,79 +237,46 @@ export class BroCalc {
     if (n <= this.karatsubaThreshold) return this.standardMultiply(xd, yd)
 
     // 배열 길이 맞추기
-    while (xd.length < n) xd.push(0)
-    while (yd.length < n) yd.push(0)
+    const paddedXd = [...xd]
+    const paddedYd = [...yd]
+    while (paddedXd.length < n) paddedXd.push(0)
+    while (paddedYd.length < n) paddedYd.push(0)
 
     const m = Math.floor(n / 2)
 
     // 분할
-    const [a, b] = this.split(xd, m)
-    const [c, d] = this.split(yd, m)
+    const [a, b] = this.split(paddedXd, m)
+    const [c, d] = this.split(paddedYd, m)
 
     // 재귀적 계산
     const ac = this.karatsubaMultiply(a, c)
     const bd = this.karatsubaMultiply(b, d)
-    const abcd = this.karatsubaMultiply(
-      this.add({ d: a, e: 0, s: 1 }, { d: b, e: 0, s: 1 }).d,
-      this.add({ d: c, e: 0, s: 1 }, { d: d, e: 0, s: 1 }).d,
-    )
+
+    // a+b와 c+d 계산을 위한 임시 Decimal 객체 생성
+    const abSum = this.calculateAdd({ d: a, e: 0, s: 1 }, { d: b, e: 0, s: 1 })
+    const cdSum = this.calculateAdd({ d: c, e: 0, s: 1 }, { d: d, e: 0, s: 1 })
+
+    const abcd = this.karatsubaMultiply(abSum.d, cdSum.d)
 
     // 결과 조합
-    return this.combine(ac, bd, abcd, m)
-  }
-
-  private newtonRaphsonReciprocal(y: Decimal): Decimal {
-    // 초기 추정값
-    let r = {
-      d: [1],
-      e: -this.estimateExponent(y),
-      s: y.s,
-    }
-
-    // Newton-Raphson 반복
-    // r = r * (2 - y * r)
-    for (let i = 0; i < this.getPrecision(y, y); i++) {
-      const yr = this.multiply(y, r)
-      const two_minus_yr = this.subtract({ d: [2], e: 0, s: 1 }, yr)
-      r = this.multiply(r, two_minus_yr)
-    }
-
-    return r
-  }
-
-  // ================================
-
-  // 헬퍼 함수들
-  private split(arr: number[], m: number): number[][] {
-    return [arr.slice(0, m), arr.slice(m)]
-  }
-
-  private combine(
-    ac: number[],
-    bd: number[],
-    abcd: number[],
-    m: number,
-  ): number[] {
-    // abcd - ac - bd
-    const middle = this.subtract(
-      this.subtract({ d: abcd, e: 0, s: 1 }, { d: ac, e: 0, s: 1 }),
-      { d: bd, e: 0, s: 1 },
-    ).d
-
-    // ac * BASE^(2m) + middle * BASE^m + bd
     const result = new Array(ac.length + 2 * m).fill(0)
 
-    // ac 부분
+    // ac 부분 (고차항)
     for (let i = 0; i < ac.length; i++) {
-      result[i] = ac[i]
+      result[i] += ac[i]
     }
 
     // middle 부분
+    const middle = this.calculateSubtract(
+      this.calculateSubtract({ d: abcd, e: 0, s: 1 }, { d: ac, e: 0, s: 1 }),
+      { d: bd, e: 0, s: 1 },
+    ).d
+
     for (let i = 0; i < middle.length; i++) {
       result[i + m] += middle[i]
     }
 
-    // bd 부분
+    // bd 부분 (저차항)
     for (let i = 0; i < bd.length; i++) {
       result[i + 2 * m] += bd[i]
     }
@@ -245,41 +284,63 @@ export class BroCalc {
     return result
   }
 
+  private newtonRaphsonReciprocal(y: Decimal): Decimal {
+    // 초기 추정값 계산
+    const initialExp = -Math.floor(Math.log10(Math.abs(y.d[0]))) - y.e
+    let r = {
+      d: [1],
+      e: initialExp,
+      s: y.s,
+    }
+
+    // Newton-Raphson 반복
+    // r = r * (2 - y * r)
+    for (let i = 0; i < 3; i++) {
+      // 일반적으로 3-4회 반복으로 충분한 정확도 달성
+      const yr = this.calculateMultiply(y, r)
+      const two_minus_yr = this.calculateSubtract({ d: [2], e: 0, s: 1 }, yr)
+      r = this.calculateMultiply(r, two_minus_yr)
+    }
+
+    return r
+  }
+
+  // 헬퍼 함수들
+  private split(arr: number[], m: number): number[][] {
+    return [arr.slice(0, m), arr.slice(m)]
+  }
+
   private isZero(x: Decimal): boolean {
     return !x.d || (x.d.length === 1 && x.d[0] === 0)
   }
 
-  private getPrecision(x: Decimal, y: Decimal): number {
+  private getPrecision(): number {
     return Math.min(
       this.maxDigits,
-      x.d.length * this.logBase + y.d.length * this.logBase,
+      this.num.d.length * this.logBase + this.num.d.length * this.logBase,
     )
   }
 
-  private estimateExponent(x: Decimal): number {
-    return x.d.length * this.logBase + x.e
-  }
-
-  private roundToPrecision(x: Decimal, precision: number): Decimal {
+  private roundToPrecision(precision: number): Decimal {
     // 정밀도에 따른 반올림 처리
     const digits = Math.floor(precision / this.logBase)
-    if (x.d.length > digits) {
-      x.d.length = digits
-      x.d = x.d.slice(0, digits)
+    if (this.num.d.length > digits) {
+      this.num.d.length = digits
+      this.num.d = this.num.d.slice(0, digits)
     }
-    return x
+    return this.num
   }
 
   // 결과를 문자열로 변환하는 헬퍼 함수
-  private toString(x: Decimal): string {
-    if (!x.d) return 'NaN'
+  toString(): string {
+    if (!this.num.d) return 'NaN'
 
-    let str = x.s < 0 ? '-' : ''
+    let str = this.num.s < 0 ? '-' : ''
     let result = ''
 
     // 각 BASE 단위 숫자를 문자열로 변환
-    for (let i = 0; i < x.d.length; i++) {
-      let chunk = x.d[i].toString()
+    for (let i = 0; i < this.num.d.length; i++) {
+      let chunk = this.num.d[i].toString()
 
       // 첫 번째 청크가 아니면 7자리로 패딩
       if (i > 0) {
@@ -290,15 +351,15 @@ export class BroCalc {
     }
 
     // 지수 적용
-    if (x.e !== 0) {
+    if (this.num.e !== 0) {
       const len = result.length
-      const absE = Math.abs(x.e)
+      const absE = Math.abs(this.num.e)
 
-      if (x.e > 0) {
-        result = result.padEnd(len + x.e, '0')
+      if (this.num.e > 0) {
+        result = result.padEnd(len + this.num.e, '0')
       } else {
         result = '0'.repeat(absE - len + 1) + result
-        result = result.slice(0, -x.e) + '.' + result.slice(-x.e)
+        result = result.slice(0, -this.num.e) + '.' + result.slice(-this.num.e)
       }
     }
 
