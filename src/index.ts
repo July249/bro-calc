@@ -1,1 +1,1 @@
-export { BroCalc } from '@core/index'
+export { BroCalc } from '@/core'

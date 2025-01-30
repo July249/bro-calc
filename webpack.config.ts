@@ -23,8 +23,11 @@ const config: Configuration = {
     },
   },
   output: {
-    filename: 'bundle.js',
+    filename: 'index.js',
     path: path.resolve(__dirname, 'dist'),
+    library: 'BroCalc',
+    libraryTarget: 'umd',
+    globalObject: 'this',
   },
 }
 

@@ -3,6 +3,7 @@
 // Configure Vitest (https://vitest.dev/config/)
 
 import { defineConfig } from 'vite'
+import path from 'path'
 
 export default defineConfig({
   test: {
@@ -13,5 +14,10 @@ export default defineConfig({
     },
     include: ['src/test/**/*.test.ts'],
     exclude: ['src/core/**/*.ts', 'src/test/sample.ts'],
+  },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
   },
 })
