@@ -14,5 +14,6 @@ describe('Get Decimal Interface', () => {
 
     // 또는 getter를 사용하여 값을 테스트
     expect(x.toString()).toBe('12345.67')
+    console.log(x.toString())
   })
 })
