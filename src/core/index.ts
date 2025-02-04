@@ -31,19 +31,20 @@ export class BroCalc implements Decimal {
   add(value: string | number | BroCalc): BroCalc {
     const o = value instanceof BroCalc ? value : this.parseInput(value)
     const result = this.calculateAdd(this, o)
-    console.log('calculateAdd return', result)
     return this.createNewInstance(result.d, result.e, result.s)
   }
 
   sub(value: string | number | BroCalc): BroCalc {
     const o = value instanceof BroCalc ? value : this.parseInput(value)
-    const result = this.calculateSub(this, o)
+    const n = this.negate(o)
+    const result = this.calculateAdd(this, n)
     return this.createNewInstance(result.d, result.e, result.s)
   }
 
   mul(value: number | string | BroCalc): BroCalc {
     const o = value instanceof BroCalc ? value : this.parseInput(value)
     const result = this.calculateMul(this, o)
+    console.log('mul - result', result)
     return this.createNewInstance(result.d, result.e, result.s)
   }
 
@@ -78,41 +79,17 @@ export class BroCalc implements Decimal {
     }
 
     const newE = Math.min(x.e, y.e)
-    const xd = [...x.d]
-    const yd = [...y.d]
+    let xd = [...x.d]
+    let yd = [...y.d]
 
     if (x.e < y.e) {
       // y의 자릿수 조정
       const offsetY = y.e - newE
-
-      for (let i = 0; i < offsetY; i++) {
-        const lastNum = yd[yd.length - 1]
-        const lastNumLength = lastNum.toString().length
-
-        if (lastNumLength < this.logBase) {
-          // 현재 요소가 7자리 미만이면 현재 요소에 0 추가
-          yd[yd.length - 1] = lastNum * 10
-        } else {
-          // 이미 7자리면 새로운 요소로 0 추가
-          yd.push(0)
-        }
-      }
+      yd = this.adjustDigits(yd, offsetY)
     } else if (y.e < x.e) {
       // x의 자릿수 조정
       const offsetX = x.e - newE
-
-      for (let i = 0; i < offsetX; i++) {
-        const lastNum = xd[xd.length - 1]
-        const lastNumLength = lastNum.toString().length
-
-        if (lastNumLength < this.logBase) {
-          // 현재 요소가 7자리 미만이면 현재 요소에 0 추가
-          xd[xd.length - 1] = lastNum * 10
-        } else {
-          // 이미 7자리면 새로운 요소로 0 추가
-          xd.push(0)
-        }
-      }
+      xd = this.adjustDigits(xd, offsetX)
     }
 
     const result = []
@@ -123,26 +100,40 @@ export class BroCalc implements Decimal {
     let resultSign = 1 // 기본값을 1로 설정
 
     if (x.s === y.s) {
-      // 두 수의 부호가 같으면 결과의 부호도 같음
       resultSign = x.s
     } else {
-      // 절대값 비교
-      const // 부호가 다르면 절대값이 큰 수의 부호를 따름
-        // 이 부분은 실제로는 뺄셈 로직으로 처리되어야 할 수 있음
-        resultSign = Math.abs(x.d[0]) >= Math.abs(y.d[0]) ? x.s : y.s
+      resultSign = this.isFirstBigger(xd, yd) ? x.s : y.s
+    }
+
+    let lengthDiff = xd.length - yd.length
+
+    // 배열 보정
+    while (lengthDiff !== 0) {
+      if (lengthDiff < 0) {
+        // xd의 자릿수 조정
+        xd.unshift(0)
+      } else if (lengthDiff > 0) {
+        // yd의 자릿수 조정
+        yd.unshift(0)
+      }
+      lengthDiff = xd.length - yd.length
     }
 
     for (let i = maxLength - 1; i >= 0; i--) {
       const xs = x.s < 0 ? -1 : 1
       const ys = y.s < 0 ? -1 : 1
+
       const sum = xs * (xd[i] || 0) + ys * (yd[i] || 0) + carry
       result.unshift(Math.abs(sum) % this.base)
       carry = Math.floor(Math.abs(sum) / this.base)
+      console.log('calculateAdd - carry', carry)
     }
 
     if (carry > 0) {
       result.unshift(carry)
     }
+
+    console.log('calculateAdd - result', result)
 
     return {
       d: result,
@@ -151,56 +142,10 @@ export class BroCalc implements Decimal {
     }
   }
 
-  private calculateSub(x: Decimal, y: Decimal): Decimal {
-    if (!x.d || !y.d) {
-      throw new Error('Invalid input')
-    }
-
-    const newE = Math.min(x.e, y.e)
-    const xd = [...x.d]
-    const yd = [...y.d]
-
-    // Adjust digits based on exponent difference
-    if (x.e < y.e) {
-      const offsetY = y.e - newE
-      for (let i = 0; i < offsetY; i++) {
-        yd.push(0)
-      }
-    } else {
-      const offsetX = x.e - newE
-      for (let i = 0; i < offsetX; i++) {
-        xd.push(0)
-      }
-    }
-
-    let result = []
-    let borrow = 0
-    const maxLength = Math.max(xd.length, yd.length)
-
-    for (let i = maxLength - 1; i >= 0; i--) {
-      let diff = (xd[i] || 0) - (yd[i] || 0) - borrow
-      if (diff < 0) {
-        diff += this.base
-        borrow = 1
-      } else {
-        borrow = 0
-      }
-      result.push(diff)
-    }
-
-    // Remove trailing zeros
-    while (result[result.length - 1] === 0 && result.length > 1) {
-      result.pop()
-    }
-
-    return {
-      d: result,
-      e: newE,
-      s: 1,
-    }
-  }
-
   private calculateMul(x: Decimal, y: Decimal): Decimal {
+    console.log('calculateMul - x', x)
+    console.log('calculateMul - y', y)
+
     if (!x.d || !y.d) {
       throw new Error('Invalid input')
     }
@@ -222,6 +167,7 @@ export class BroCalc implements Decimal {
     const resultE = x.e + y.e
 
     let digits: number[] = []
+
     if (x.d.length + y.d.length < this.karatsubaThreshold) {
       digits = this.standardMultiply(x.d, y.d)
     } else {
@@ -253,7 +199,71 @@ export class BroCalc implements Decimal {
 
   // ================================ Utility ================================
 
+  private negate(value: Decimal): Decimal {
+    return {
+      d: value.d,
+      e: value.e,
+      s: -value.s,
+    }
+  }
+
+  /**
+   * 자릿수 조정
+   * @param d 정수 자릿수 배열
+   * @param offset 조정할 자릿수 (ex. 1)
+   * @returns 조정된 자릿수 배열
+   * @description 자릿수 조정 로직
+   *
+   * 예시1
+   * input: [12, 3456789], 1
+   * output: [123, 4567890] = 123 * 10^7 + 4567890 * 10^0 = 12,345,678,900
+   *
+   * 예시2
+   * input: [12, 3456789], 2
+   * output: [1234, 5678900] = 1234 * 10^7 + 5678900 * 10^0 = 12,345,678,900
+   *
+   * 예시3
+   * input: [1], 8
+   * output: [10, 0000000] = 10 * 10^7 + 0 = 1 * 10^8
+   *
+   * 예시4
+   * input: [1], 23
+   * output: [100, 0, 0, 0] = 100 * 10^21 + 0 * 10^14 + 0 * 10^7 + 0 = 1 * 10^23
+   */
+  private adjustDigits(d: number[], offset: number): number[] {
+    const result = [...d]
+
+    const quotient = Math.floor(offset / this.logBase)
+    const remainder = offset % this.logBase
+
+    // 10^(offset / this.logBase의 나머지) 만큼 result의 모든 요소에 곱함
+    for (let i = 0; i < result.length; i++) {
+      result[i] *= Math.pow(10, remainder)
+    }
+
+    // result[i]의 자릿수가 7자리를 넘어가면 넘어간 부분을 자릿수 올림(result[i-1]에 더함)
+    for (let i = 0; i < result.length; i++) {
+      if (result[i].toString().length > this.logBase) {
+        const overflow_length = result[i].toString().length - this.logBase
+
+        const overflow_str = result[i].toString().slice(0, overflow_length)
+
+        result[i - 1] += parseInt(overflow_str, 10)
+        result[i] = parseInt(result[i].toString().slice(overflow_length), 10)
+      }
+    }
+
+    // 10^(offset / this.logBase의 몫) 만큼 result에 0만 있는 요소를 추가
+    for (let i = 0; i < quotient; i++) {
+      result.push(0)
+    }
+
+    return result
+  }
+
   private parseInput(value: number | string): Decimal {
+    this.isError(value)
+
     let str = ''
 
     if (typeof value === 'number') {
@@ -261,6 +271,7 @@ export class BroCalc implements Decimal {
     } else {
       str = value
     }
+
     // 부호 처리
     let sign = 1
     let numStr = str
@@ -273,11 +284,35 @@ export class BroCalc implements Decimal {
 
     // 소수점 처리
     let e = 0
-    const parts = numStr.split('.')
-    numStr = parts[0] + (parts[1] || '')
-    if (parts.length > 1) {
+    let parts: string[] = []
+
+    if (numStr.includes('e')) {
+      // e 표기법 처리
+      const [mantissa, exponent] = numStr.split('e')
+      const exp = parseInt(exponent, 10)
+
+      if (mantissa.includes('.')) {
+        // 1.234e1 같은 형태
+        const [intPart, decPart] = mantissa.split('.')
+        parts = [intPart + decPart]
+        // 소수점 이동: 원래 소수점 위치에서 지수만큼 이동
+        e = -decPart.length + exp
+      } else {
+        // 1e-10 같은 형태
+        parts = [mantissa]
+        e = exp
+      }
+    } else if (numStr.includes('.')) {
+      // 일반 소수점 형태 (예: 1.234)
+      parts = numStr.split('.')
       e = -parts[1].length
+    } else {
+      // 정수 형태
+      parts = [numStr]
+      e = 0
     }
+
+    numStr = parts[0] + (parts[1] || '')
 
     // 앞의 0 제거
     numStr = numStr.replace(/^0+/, '')
@@ -300,17 +335,25 @@ export class BroCalc implements Decimal {
   }
 
   private standardMultiply(xd: number[], yd: number[]): number[] {
-    const result = new Array(xd.length + yd.length).fill(0)
+    let x = 0
+    let y = 0
 
-    for (let i = xd.length - 1; i >= 0; i--) {
-      for (let j = yd.length - 1; j >= 0; j--) {
-        const product = xd[i] * yd[j]
-        const pos = i + j
-        result[pos] += product
-      }
+    const _xd = xd
+    const _yd = yd
+
+    for (let i = 0; i < _xd.length; i++) {
+      const pow = (_xd.length - 1 - i) * this.logBase
+      x += _xd[i] * Math.pow(10, pow)
     }
 
-    return result
+    for (let i = 0; i < _yd.length; i++) {
+      const pow = (_yd.length - 1 - i) * this.logBase
+      y += _yd[i] * Math.pow(10, pow)
+    }
+
+    const result = this.parseInput(x * y)
+
+    return result.d
   }
 
   private karatsubaMultiply(xd: number[], yd: number[]): number[] {
@@ -341,8 +384,8 @@ export class BroCalc implements Decimal {
       result[i] += ac[i]
     }
 
-    const middle = this.calculateSub(
-      this.calculateSub({ d: abcd, e: 0, s: 1 }, { d: ac, e: 0, s: 1 }),
+    const middle = this.calculateAdd(
+      this.calculateAdd({ d: abcd, e: 0, s: 1 }, { d: ac, e: 0, s: 1 }),
       { d: bd, e: 0, s: 1 },
     ).d
 
@@ -367,7 +410,7 @@ export class BroCalc implements Decimal {
 
     for (let i = 0; i < 3; i++) {
       const yr = this.calculateMul(y, r)
-      const two_minus_yr = this.calculateSub({ d: [2], e: 0, s: 1 }, yr)
+      const two_minus_yr = this.calculateAdd({ d: [2], e: 0, s: 1 }, yr)
       r = this.calculateMul(r, two_minus_yr)
     }
 
@@ -377,10 +420,6 @@ export class BroCalc implements Decimal {
   private split(arr: number[], m: number): number[][] {
     return [arr.slice(0, m), arr.slice(m)]
   }
-
-  // private isZero(x: Decimal): boolean {
-  //   return !x.d || (x.d.length === 1 && x.d[0] === 0)
-  // }
 
   private isZero(x: BroCalc | Decimal): boolean {
     const d = x instanceof BroCalc ? x.getDecimal() : x
@@ -394,6 +433,44 @@ export class BroCalc implements Decimal {
 
   private isNegativeOne(x: Decimal): boolean {
     return x.d.length === 1 && x.d[0] === 1 && x.e === 0 && x.s === -1
+  }
+
+  private isError(x: string | number | BroCalc): void {
+    if (typeof x === 'number') {
+      if (x === Number.POSITIVE_INFINITY || x === Number.NEGATIVE_INFINITY) {
+        throw new Error('Multiple of Infinity is not allowed')
+      } else if (isNaN(x)) {
+        throw new Error(`Invalid input: ${x}`)
+      }
+    } else if (x instanceof BroCalc) {
+      for (let i = 0; i < x.d.length; i++) {
+        if (
+          x.d[i] === Number.POSITIVE_INFINITY ||
+          x.d[i] === Number.NEGATIVE_INFINITY
+        ) {
+          throw new Error('Multiple of Infinity is not allowed')
+        } else if (isNaN(x.d[i])) {
+          throw new Error(`Invalid input: ${x.d[i]}`)
+        }
+      }
+    } else if (typeof x === 'string') {
+      // 빈 문자열 체크
+      if (x.trim() === '') {
+        throw new Error('Empty string is not allowed')
+      }
+      // 숫자 형식이 아닌 문자열 체크 (숫자, 소수점, 부호, e 표기법만 허용)
+      if (!/^[-+]?(\d*\.?\d+|\d+\.?\d*)(e[-+]?\d+)?$/i.test(x)) {
+        throw new Error(`Invalid number format: ${x}`)
+      }
+      // Infinity 체크
+      if (x === 'Infinity' || x === '-Infinity') {
+        throw new Error('Multiple of Infinity is not allowed')
+      }
+      // 숫자로 변환 시 NaN 체크
+      if (isNaN(Number(x))) {
+        throw new Error(`Invalid input: ${x}`)
+      }
+    }
   }
 
   private getPrecision(): number {
@@ -437,6 +514,23 @@ export class BroCalc implements Decimal {
     }
   }
 
+  private isFirstBigger(first: number[], second: number[]): boolean {
+    // 먼저 자릿수 비교
+    if (first.length !== second.length) {
+      return first.length > second.length
+    }
+
+    // 자릿수가 같으면 각 자리를 순차적으로 비교
+    for (let i = 0; i < first.length; i++) {
+      if (first[i] !== second[i]) {
+        return first[i] > second[i]
+      }
+    }
+
+    // 모든 자리가 같으면 false 반환
+    return false
+  }
+
   private createNewInstance(d: number[], e: number, s: number): BroCalc {
     const newBroCalc = Object.create(BroCalc.prototype)
     newBroCalc.d = d
@@ -446,7 +540,6 @@ export class BroCalc implements Decimal {
   }
 
   private decimalToString(decimal: Decimal): string {
-    console.log('decimalToString input:', decimal)
     if (!decimal.d) return 'NaN'
 
     let str = decimal.s < 0 ? '-' : ''
@@ -458,7 +551,7 @@ export class BroCalc implements Decimal {
 
       // 첫 번째 요소가 아니면 7자리로 패딩
       if (i > 0) {
-        chunk = chunk.padStart(this.logBase, '0')
+        chunk = chunk.padStart(7, '0')
       }
       result += chunk
     }
@@ -466,7 +559,6 @@ export class BroCalc implements Decimal {
     // 지수에 따른 소수점 처리
     if (decimal.e !== 0) {
       const len = result.length
-      const absE = Math.abs(decimal.e)
 
       if (decimal.e > 0) {
         // 양수 지수: 뒤에 0 추가
@@ -483,6 +575,8 @@ export class BroCalc implements Decimal {
         }
       }
     }
+
+    console.log('str + result', str + result)
 
     return str + result
   }
