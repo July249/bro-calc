@@ -18,7 +18,7 @@ export class BroCalc implements Decimal {
     this.base = 1e7
     this.logBase = 7
     this.maxDigits = 1e9
-    this.karatsubaThreshold = 30
+    this.karatsubaThreshold = 1
 
     const parsed = this.parseInput(value)
     this.d = parsed.d
@@ -143,9 +143,6 @@ export class BroCalc implements Decimal {
   }
 
   private calculateMul(x: Decimal, y: Decimal): Decimal {
-    console.log('calculateMul - x', x)
-    console.log('calculateMul - y', y)
-
     if (!x.d || !y.d) {
       throw new Error('Invalid input')
     }
@@ -334,6 +331,105 @@ export class BroCalc implements Decimal {
     }
   }
 
+  /// 확인중
+  // private standardMultiply(xd: number[], yd: number[]): number[] {
+  //   const result = new Array(xd.length + yd.length).fill(0)
+
+  //   // 각 자리수끼리 곱하기
+  //   for (let i = xd.length - 1; i >= 0; i--) {
+  //     for (let j = yd.length - 1; j >= 0; j--) {
+  //       const product = xd[i] * yd[j]
+  //       const pos = i + j
+  //       result[pos] += product
+  //     }
+  //   }
+
+  //   // 자리올림 처리
+  //   for (let i = result.length - 1; i > 0; i--) {
+  //     if (result[i] >= this.base) {
+  //       result[i - 1] += Math.floor(result[i] / this.base)
+  //       result[i] %= this.base
+  //     }
+  //   }
+
+  //   // 결과를 문자열로 변환하고 7자리씩 나누어 배열로 변환
+  //   let numStr = ''
+  //   for (let i = 0; i < result.length; i++) {
+  //     numStr =
+  //       result[i].toString().padStart(i > 0 ? this.logBase : 0, '0') + numStr
+  //   }
+
+  //   const finalResult = []
+  //   for (let i = numStr.length; i > 0; i -= this.logBase) {
+  //     const start = Math.max(0, i - this.logBase)
+  //     const chunk = numStr.slice(start, i)
+  //     finalResult.unshift(parseInt(chunk, 10))
+  //   }
+
+  //   return finalResult
+  // }
+
+  // private karatsubaMultiply(xd: number[], yd: number[]): number[] {
+  //   const n = Math.max(xd.length, yd.length)
+  //   if (n <= this.karatsubaThreshold) return this.standardMultiply(xd, yd)
+
+  //   // 배열을 문자열로 변환
+  //   let xStr = ''
+  //   let yStr = ''
+  //   for (let i = 0; i < xd.length; i++) {
+  //     xStr = xd[i].toString().padStart(i > 0 ? this.logBase : 0, '0') + xStr
+  //   }
+  //   for (let i = 0; i < yd.length; i++) {
+  //     yStr = yd[i].toString().padStart(i > 0 ? this.logBase : 0, '0') + yStr
+  //   }
+
+  //   // 카라츠바 알고리즘 적용을 위한 분할
+  //   const m = Math.floor(Math.max(xStr.length, yStr.length) / 2)
+
+  //   // a, b, c, d 구하기
+  //   const a = xStr.slice(0, -m) || '0'
+  //   const b = xStr.slice(-m) || '0'
+  //   const c = yStr.slice(0, -m) || '0'
+  //   const d = yStr.slice(-m) || '0'
+
+  //   // z0 = a * c
+  //   const z0 = this.stringToArray(BigInt(a) * BigInt(c))
+
+  //   // z2 = b * d
+  //   const z2 = this.stringToArray(BigInt(b) * BigInt(d))
+
+  //   // z1 = (a + b)(c + d) - z0 - z2
+  //   const z1 = this.stringToArray(BigInt(a) * BigInt(d) + BigInt(b) * BigInt(c))
+
+  //   // 결과 조합
+  //   const result = this.stringToArray(
+  //     BigInt(this.arrayToString(z0)) * BigInt(10 ** (2 * m)) +
+  //       BigInt(this.arrayToString(z1)) * BigInt(10 ** m) +
+  //       BigInt(this.arrayToString(z2)),
+  //   )
+
+  //   return result
+  // }
+
+  // private stringToArray(num: bigint): number[] {
+  //   const str = num.toString()
+  //   const result = []
+  //   for (let i = str.length; i > 0; i -= this.logBase) {
+  //     const start = Math.max(0, i - this.logBase)
+  //     const chunk = str.slice(start, i)
+  //     result.unshift(parseInt(chunk, 10))
+  //   }
+  //   return result
+  // }
+
+  // private arrayToString(arr: number[]): string {
+  //   let result = ''
+  //   for (let i = 0; i < arr.length; i++) {
+  //     result += arr[i].toString().padStart(i > 0 ? this.logBase : 0, '0')
+  //   }
+  //   return result
+  // }
+
   private standardMultiply(xd: number[], yd: number[]): number[] {
     let x = 0
     let y = 0
@@ -358,46 +454,90 @@ export class BroCalc implements Decimal {
 
   private karatsubaMultiply(xd: number[], yd: number[]): number[] {
     const n = Math.max(xd.length, yd.length)
+
     if (n <= this.karatsubaThreshold) return this.standardMultiply(xd, yd)
+
+    console.log('karatsubaMultiply!!!')
 
     const paddedXd = [...xd]
     const paddedYd = [...yd]
-    while (paddedXd.length < n) paddedXd.push(0)
-    while (paddedYd.length < n) paddedYd.push(0)
+    while (paddedXd.length < n) paddedXd.unshift(0)
+    while (paddedYd.length < n) paddedYd.unshift(0)
 
+    // 배열을 반으로 나누는 기준점
     const m = Math.floor(n / 2)
+
+    console.log('m', m)
 
     const [a, b] = this.split(paddedXd, m)
     const [c, d] = this.split(paddedYd, m)
 
+    // 각 부분의 지수값 계산
+    const e_a = (paddedXd.length - 1) * this.logBase
+    const e_b = 0
+    const e_c = (paddedYd.length - 1) * this.logBase
+    const e_d = 0
+
+    console.log('a', a)
+    console.log('e_a', e_a)
+    console.log('b', b)
+    console.log('e_b', e_b)
+    console.log('c', c)
+    console.log('e_c', e_c)
+    console.log('d', d)
+    console.log('e_d', e_d)
+
     const ac = this.karatsubaMultiply(a, c)
     const bd = this.karatsubaMultiply(b, d)
 
+    const e_ac = Math.max(e_a, e_c) * 2
+    const e_bd = 0
+
+    console.log('ac', ac)
+    console.log('e_ac', e_ac)
+    console.log('bd', bd)
+    console.log('e_bd', e_bd)
+
     const abSum = this.calculateAdd({ d: a, e: 0, s: 1 }, { d: b, e: 0, s: 1 })
     const cdSum = this.calculateAdd({ d: c, e: 0, s: 1 }, { d: d, e: 0, s: 1 })
-
     const abcd = this.karatsubaMultiply(abSum.d, cdSum.d)
 
-    const result = new Array(ac.length + 2 * m).fill(0)
+    const e_abcd = Math.max(e_a, e_c)
 
-    for (let i = 0; i < ac.length; i++) {
-      result[i] += ac[i]
-    }
+    console.log('abcd', abcd)
+    console.log('e_abcd', e_abcd)
 
-    const middle = this.calculateAdd(
-      this.calculateAdd({ d: abcd, e: 0, s: 1 }, { d: ac, e: 0, s: 1 }),
-      { d: bd, e: 0, s: 1 },
-    ).d
+    const decimal_ac = this.calculateAdd(
+      { d: [0], e: 0, s: 1 },
+      { d: ac, e: e_ac, s: 1 },
+    )
 
-    for (let i = 0; i < middle.length; i++) {
-      result[i + m] += middle[i]
-    }
+    const decimal_bd = this.calculateAdd(
+      { d: [0], e: 0, s: 1 },
+      { d: bd, e: e_bd, s: 1 },
+    )
 
-    for (let i = 0; i < bd.length; i++) {
-      result[i + 2 * m] += bd[i]
-    }
+    const decimal_middle = this.calculateAdd(
+      { d: abcd, e: 0, s: 1 },
+      this.calculateAdd({ d: ac, e: 0, s: -1 }, { d: bd, e: 0, s: -1 }),
+    )
 
-    return result
+    const poweredZ2 = this.adjustDigits(decimal_ac.d, e_ac)
+
+    const poweredZ0 = this.adjustDigits(decimal_bd.d, e_bd)
+
+    // middle 항 계산
+    const poweredZ1 = this.adjustDigits(decimal_middle.d, e_abcd)
+
+    const x = this.calculateAdd(
+      this.calculateAdd(
+        { d: poweredZ1, e: 0, s: 1 },
+        { d: poweredZ2, e: 0, s: 1 },
+      ),
+      { d: poweredZ0, e: 0, s: 1 },
+    )
+
+    return x.d
   }
 
   private newtonRaphsonReciprocal(y: Decimal): Decimal {
