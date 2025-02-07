@@ -123,17 +123,32 @@ export class BroCalc implements Decimal {
       const xs = x.s < 0 ? -1 : 1
       const ys = y.s < 0 ? -1 : 1
 
+      console.log(`calculateAdd - xd[${i}]`, xs * (xd[i] || 0))
+      console.log(`calculateAdd - yd[${i}]`, ys * (yd[i] || 0))
+      console.log(`calculateAdd - carry`, carry)
+
       const sum = xs * (xd[i] || 0) + ys * (yd[i] || 0) + carry
+      console.log('calculateAdd - sum', sum)
       result.unshift(Math.abs(sum) % this.base)
-      carry = Math.floor(Math.abs(sum) / this.base)
+
+      const absSum = Math.abs(sum)
+
+      // carry의 부호를 유지하면서 계산
+      if (sum < 0) {
+        carry = -Math.floor(absSum / this.base)
+      } else {
+        carry = Math.floor(absSum / this.base)
+      }
+
       console.log('calculateAdd - carry', carry)
+      console.log('calculateAdd - result', result)
     }
 
     if (carry > 0) {
       result.unshift(carry)
     }
 
-    console.log('calculateAdd - result', result)
+    console.log('calculateAdd - return', result)
 
     return {
       d: result,
@@ -221,7 +236,7 @@ export class BroCalc implements Decimal {
    *
    * 예시3
    * input: [1], 8
-   * output: [10, 0000000] = 10 * 10^7 + 0 = 1 * 10^8
+   * output: [10, 0] = 10 * 10^7 + 0 = 1 * 10^8
    *
    * 예시4
    * input: [1], 23
@@ -500,8 +515,11 @@ export class BroCalc implements Decimal {
 
     const abSum = this.calculateAdd({ d: a, e: 0, s: 1 }, { d: b, e: 0, s: 1 })
     const cdSum = this.calculateAdd({ d: c, e: 0, s: 1 }, { d: d, e: 0, s: 1 })
-    const abcd = this.karatsubaMultiply(abSum.d, cdSum.d)
 
+    console.log('abSum', abSum)
+    console.log('cdSum', cdSum)
+
+    const abcd = this.karatsubaMultiply(abSum.d, cdSum.d)
     const e_abcd = Math.max(e_a, e_c)
 
     console.log('abcd', abcd)
@@ -511,23 +529,29 @@ export class BroCalc implements Decimal {
       { d: [0], e: 0, s: 1 },
       { d: ac, e: e_ac, s: 1 },
     )
+    console.log('decimal_ac', decimal_ac)
 
     const decimal_bd = this.calculateAdd(
       { d: [0], e: 0, s: 1 },
       { d: bd, e: e_bd, s: 1 },
     )
+    console.log('decimal_bd', decimal_bd)
 
     const decimal_middle = this.calculateAdd(
       { d: abcd, e: 0, s: 1 },
       this.calculateAdd({ d: ac, e: 0, s: -1 }, { d: bd, e: 0, s: -1 }),
     )
+    console.log('decimal_middle', decimal_middle)
 
     const poweredZ2 = this.adjustDigits(decimal_ac.d, e_ac)
+    console.log('poweredZ2', poweredZ2)
 
     const poweredZ0 = this.adjustDigits(decimal_bd.d, e_bd)
+    console.log('poweredZ0', poweredZ0)
 
     // middle 항 계산
     const poweredZ1 = this.adjustDigits(decimal_middle.d, e_abcd)
+    console.log('poweredZ1', poweredZ1)
 
     const x = this.calculateAdd(
       this.calculateAdd(
