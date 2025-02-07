@@ -18,7 +18,7 @@ export class BroCalc implements Decimal {
     this.base = 1e7
     this.logBase = 7
     this.maxDigits = 1e9
-    this.karatsubaThreshold = 1
+    this.karatsubaThreshold = 4
 
     const parsed = this.parseInput(value)
     this.d = parsed.d
@@ -309,9 +309,93 @@ export class BroCalc implements Decimal {
   private calculateDiv(x: Decimal, y: Decimal): Decimal {
     if (!y.d || this.isZero(y)) throw new Error('Division by zero')
     if (!x.d) throw new Error('Invalid dividend')
+    if (this.isZero(x)) return { d: [0], e: 0, s: 1 }
 
-    const reciprocal = this.newtonRaphsonReciprocal(y)
-    return this.calculateMul(x, reciprocal)
+    // 부호 처리
+    const resultSign = x.s * y.s
+    // 초기 지수 차이 계산
+    let quotientExp = x.e - y.e
+
+    // 피제수와 제수의 배열 복사
+    const dividend = x.d.slice()
+    const divisor = y.d.slice()
+
+    // 선행 0 제거
+    while (dividend[0] === 0 && dividend.length > 1) dividend.shift()
+    while (divisor[0] === 0 && divisor.length > 1) divisor.shift()
+
+    // dividend < divisor 체크 부분 수정
+    if (this.compareArrays(dividend, divisor) < 0) {
+      // 여기서 바로 0을 반환하지 말고, 소수점 이하 자릿수를 계산해야 함
+      dividend.push(0) // 소수점 이하 계산을 위해 0을 추가
+      quotientExp-- // 지수 조정
+    }
+
+    const quotient: number[] = []
+    let remainder: number[] = []
+
+    // 장수 나눗셈 수행
+    for (let i = 0; i < dividend.length; i++) {
+      // 현재 자릿수를 remainder에 추가
+      remainder.push(dividend[i])
+
+      // remainder의 선행 0 제거
+      while (remainder[0] === 0 && remainder.length > 1) {
+        remainder.shift()
+      }
+
+      // 현재 remainder와 divisor를 비교하여 몫 계산
+      let qdigit = 0
+      console.log(
+        'this.compareArrays(remainder, divisor)',
+        this.compareArrays(remainder, divisor),
+      )
+      console.log('remainder', remainder)
+      console.log('divisor', divisor)
+      console.log('qdigit', qdigit)
+      while (this.compareArrays(remainder, divisor) >= 0) {
+        remainder = this.subtractArrays(remainder, divisor)
+        qdigit++
+
+        // BASE를 넘어가지 않도록 체크
+        if (qdigit >= this.base) {
+          throw new Error('Division result exceeds maximum digits')
+        }
+      }
+
+      quotient.push(qdigit)
+    }
+
+    // 결과의 선행 0 제거
+    while (quotient[0] === 0 && quotient.length > 1) {
+      quotient.shift()
+    }
+
+    // 후행 0 제거
+    while (quotient[quotient.length - 1] === 0 && quotient.length > 1) {
+      quotient.pop()
+    }
+
+    // 자릿수 조정
+    let adjustedQuotient = quotient
+    let adjustedExp = quotientExp
+
+    console.log('adjustedQuotient', adjustedQuotient)
+    console.log('adjustedExp', adjustedExp)
+
+    // BASE(10^7) 기준으로 자릿수 조정
+    while (adjustedQuotient[0] >= this.base) {
+      const carry = Math.floor(adjustedQuotient[0] / this.base)
+      adjustedQuotient[0] %= this.base
+      adjustedQuotient.unshift(carry)
+      adjustedExp += this.logBase
+    }
+
+    return {
+      d: adjustedQuotient,
+      e: adjustedExp,
+      s: resultSign,
+    }
   }
 
   // ================================ Utility ================================
@@ -534,16 +618,17 @@ export class BroCalc implements Decimal {
   }
 
   private newtonRaphsonReciprocal(y: Decimal): Decimal {
-    const initialExp = -Math.floor(Math.log10(Math.abs(y.d[0]))) - y.e
+    const r0Digit = Math.floor(10 / y.d[0]) // y.d[0]가 2라면 r0Digit은 5
+    const r0Exp = -1 - y.e // y.e가 0이면 r0Exp는 -1
     let r = {
-      d: [1],
-      e: initialExp,
+      d: [r0Digit],
+      e: r0Exp,
       s: y.s,
     }
 
     for (let i = 0; i < 3; i++) {
       const yr = this.calculateMul(y, r)
-      const two_minus_yr = this.calculateAdd({ d: [2], e: 0, s: 1 }, yr)
+      const two_minus_yr = this.calculateSub({ d: [2], e: 0, s: 1 }, yr)
       r = this.calculateMul(r, two_minus_yr)
     }
 
@@ -647,6 +732,49 @@ export class BroCalc implements Decimal {
     }
   }
 
+  private isGreaterOrEqual(x: Decimal, y: Decimal): boolean {
+    // 부호가 다른 경우
+    if (x.s !== y.s) {
+      return x.s > y.s
+    }
+
+    // 지수가 다른 경우
+    if (x.e !== y.e) {
+      return x.s === 1 ? x.e > y.e : x.e < y.e
+    }
+
+    // 자릿수가 다른 경우
+    if (x.d.length !== y.d.length) {
+      return x.s === 1 ? x.d.length > y.d.length : x.d.length < y.d.length
+    }
+
+    // 각 자릿수 비교
+    for (let i = 0; i < x.d.length; i++) {
+      if (x.d[i] !== y.d[i]) {
+        return x.s === 1 ? x.d[i] > y.d[i] : x.d[i] < y.d[i]
+      }
+    }
+
+    // 모든 자릿수가 같은 경우
+    return true
+  }
+
+  private setBit(number: number[], position: number): number[] {
+    const result = [...number]
+    const arrayIndex = Math.floor(position / this.logBase)
+    const bitPosition = position % this.logBase
+
+    // 필요한 경우 배열 확장
+    while (result.length <= arrayIndex) {
+      result.unshift(0)
+    }
+
+    // 해당 위치의 비트를 1로 설정
+    result[result.length - 1 - arrayIndex] |= 1 << bitPosition
+
+    return result
+  }
+
   private isFirstBigger(first: number[], second: number[]): boolean {
     // 먼저 자릿수 비교
     if (first.length !== second.length) {
@@ -712,5 +840,48 @@ export class BroCalc implements Decimal {
     console.log('str + result', str + result)
 
     return str + result
+  }
+
+  private subtractArrays(a: number[], b: number[]): number[] {
+    const result = a.slice()
+    let borrow = 0
+    let aIndex = result.length - 1
+    let bIndex = b.length - 1
+
+    while (bIndex >= 0 || borrow) {
+      const subtrahend = (bIndex >= 0 ? b[bIndex] : 0) + borrow
+
+      if (result[aIndex] < subtrahend) {
+        result[aIndex] += this.base
+        borrow = 1
+      } else {
+        borrow = 0
+      }
+
+      result[aIndex] = result[aIndex] - subtrahend
+      aIndex--
+      bIndex--
+    }
+
+    // 선행 0 제거
+    while (result[0] === 0 && result.length > 1) {
+      result.shift()
+    }
+
+    return result
+  }
+
+  private compareArrays(a: number[], b: number[]): number {
+    if (a.length !== b.length) {
+      return a.length > b.length ? 1 : -1
+    }
+
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) {
+        return a[i] > b[i] ? 1 : -1
+      }
+    }
+
+    return 0
   }
 }
