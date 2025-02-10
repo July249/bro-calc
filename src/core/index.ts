@@ -1,33 +1,62 @@
+/**
+ * 십진수 계산을 위한 기본 인터페이스
+ */
 interface Decimal {
-  d: number[]
-  e: number
-  s: number
+  readonly d: number[] // 숫자를 담는 배열(끝에서부터 7자리씩 끊어서 저장)
+  readonly e: number // 지수
+  readonly s: number // 부호 (1 또는 -1)
 }
 
+/**
+ * 고정밀도 십진 연산을 위한 클래스
+ */
 export class BroCalc implements Decimal {
-  d: number[]
-  e: number
-  s: number
+  // ================================ Properties ================================
+  readonly d: number[]
+  readonly e: number
+  readonly s: number
 
-  private base: number
-  private logBase: number
-  private karatsubaThreshold: number
-  private maxDigits: number
+  private readonly base: number
+  private readonly logBase: number
+  private readonly karatsubaThreshold: number
+  private readonly maxDigits: number
 
-  constructor(value: number | string = 0) {
+  // ================================ Constructor ================================
+  constructor(value: number | string | BroCalc = 0) {
+    if (!(this instanceof BroCalc)) {
+      throw new Error('BroCalc must be called with the new operator')
+    }
+
+    // 기본값 설정
     this.base = 1e7
     this.logBase = 7
     this.maxDigits = 1e9
     this.karatsubaThreshold = 2
 
-    const parsed = this.parseInput(value)
-    this.d = parsed.d
-    this.e = parsed.e
-    this.s = parsed.s
+    // 값 초기화
+    if (value instanceof BroCalc) {
+      this.d = [...value.d]
+      this.e = value.e
+      this.s = value.s
+    } else {
+      const parsed = this.parseInput(value)
+      this.d = parsed.d
+      this.e = parsed.e
+      this.s = parsed.s
+    }
+
+    // 불변성 보장
+    Object.freeze(this.d)
+    Object.freeze(this)
   }
 
   // ================================ Public Methods ================================
 
+  /**
+   * 덧셈 연산
+   * @param value 더할 값
+   * @returns 덧셈 결과 (BroCalc 인스턴스)
+   */
   add(value: string | number | BroCalc): BroCalc {
     const o = value instanceof BroCalc ? value : this.parseInput(value)
     let result: Decimal = {
@@ -35,6 +64,7 @@ export class BroCalc implements Decimal {
       e: 0,
       s: 1,
     }
+    // ! 더할 수가 음수인지 판단해서 에러를 반환하는 것은 옳지 않은 것 같다. 테스트 코드로 확인해야 한다.
     if (this.s === -1)
       throw new Error(
         'Negative number is not allowed. Use sub function instead.',
@@ -48,6 +78,11 @@ export class BroCalc implements Decimal {
     return this.createNewInstance(result.d, result.e, result.s)
   }
 
+  /**
+   * 뺄셈 연산
+   * @param value 뺄 값
+   * @returns 뺄셈 결과 (BroCalc 인스턴스)
+   */
   sub(value: string | number | BroCalc): BroCalc {
     const o = value instanceof BroCalc ? value : this.parseInput(value)
     let result: Decimal = {
@@ -63,24 +98,37 @@ export class BroCalc implements Decimal {
       result = this.calculateSub(this, o)
     }
 
-    console.log('sub - result', result)
-
     return this.createNewInstance(result.d, result.e, result.s)
   }
 
+  /**
+   * 곱셈 연산
+   * @param value 곱할 값
+   * @returns 곱셈 결과 (BroCalc 인스턴스)
+   */
   mul(value: number | string | BroCalc): BroCalc {
     const o = value instanceof BroCalc ? value : this.parseInput(value)
     const result = this.calculateMul(this, o)
-    console.log('mul - result', result)
     return this.createNewInstance(result.d, result.e, result.s)
   }
 
+  /**
+   * 나눗셈 연산
+   * @param value 나눌 값
+   * @returns 나눗셈 결과 (BroCalc 인스턴스)
+   */
+  // *** 미구현 상태 ***
   div(value: number | string | BroCalc): BroCalc {
     const o = value instanceof BroCalc ? value : this.parseInput(value)
     const result = this.calculateDiv(this, o)
     return this.createNewInstance(result.d, result.e, result.s)
   }
 
+  /**
+   * 거듭제곱 연산
+   * @param value 거듭제곱할 값
+   * @returns 거듭제곱 결과 (BroCalc 인스턴스)
+   */
   // *** 미구현 상태 ***
   pow(value: number | string | BroCalc): BroCalc {
     const o = value instanceof BroCalc ? value : this.parseInput(value)
@@ -88,6 +136,11 @@ export class BroCalc implements Decimal {
     return this.createNewInstance(o.d, o.e, o.s)
   }
 
+  /**
+   * 제곱근 연산
+   * @param value 제곱근할 값
+   * @returns 제곱근 결과 (BroCalc 인스턴스)
+   */
   // *** 미구현 상태 ***
   sqrt(value: number | string | BroCalc): BroCalc {
     const o = value instanceof BroCalc ? value : this.parseInput(value)
@@ -95,29 +148,57 @@ export class BroCalc implements Decimal {
     return this.createNewInstance(o.d, o.e, o.s)
   }
 
+  // ================================ Return Methods ================================
+  /**
+   * 십진수를 문자열로 변환
+   * @returns 문자열
+   */
   toString(): string {
     return this.decimalToString(this)
   }
 
+  /**
+   * 십진수를 JSON 문자열로 변환
+   * @returns JSON 문자열
+   */
+  toJSON(): string {
+    return this.toString()
+  }
+
+  /**
+   * 십진수를 문자열로 변환
+   * @param hint 힌트
+   * @returns 문자열
+   */
+  [Symbol.toPrimitive](hint: 'string' | 'number' | 'default'): string {
+    if (hint === 'number') {
+      throw new Error(
+        'BroCalc cannot be converted to a number to prevent floating point issues',
+      )
+    }
+    return this.toString()
+  }
+
   // ================================ Calculation Logic ================================
 
+  /**
+   * 덧셈 연산
+   * @param x 더할 값
+   * @param y 더할 값
+   * @returns 덧셈 결과 (Decimal 인터페이스)
+   */
   private calculateAdd(x: Decimal, y: Decimal): Decimal {
+    // 유효하지 않은 입력 체크
     if (!x.d || !y.d) {
       throw new Error('Invalid input')
     }
 
     // 덧셈 항등원(0) 체크
-    if (this.isZero(y)) {
-      return x
-    }
-    if (this.isZero(x)) {
-      return y
-    }
+    if (this.isZero(y)) return x
+    if (this.isZero(x)) return y
 
     // 덧셈 역원 체크
-    if (this.isAdditiveInverse(x, y)) {
-      return { d: [0], e: 0, s: 1 }
-    }
+    if (this.isAdditiveInverse(x, y)) return { d: [0], e: 0, s: 1 }
 
     const newE = Math.min(x.e, y.e)
     let xd = [...x.d]
@@ -164,12 +245,7 @@ export class BroCalc implements Decimal {
       const xs = x.s < 0 ? -1 : 1
       const ys = y.s < 0 ? -1 : 1
 
-      console.log(`calculateAdd - xd[${i}]`, xs * (xd[i] || 0))
-      console.log(`calculateAdd - yd[${i}]`, ys * (yd[i] || 0))
-      console.log(`calculateAdd - carry`, carry)
-
       const sum = xs * (xd[i] || 0) + ys * (yd[i] || 0) + carry
-      console.log('calculateAdd - sum', sum)
 
       result.unshift(Math.abs(sum) % this.base)
 
@@ -181,15 +257,11 @@ export class BroCalc implements Decimal {
       } else {
         carry = Math.floor(absSum / this.base)
       }
-
-      console.log('calculateAdd - result', result)
     }
 
     if (carry > 0) {
       result.unshift(carry)
     }
-
-    console.log('calculateAdd - return', result)
 
     return {
       d: result,
@@ -198,7 +270,14 @@ export class BroCalc implements Decimal {
     }
   }
 
+  /**
+   * 뺄셈 연산
+   * @param x 뺄 값
+   * @param y 뺄 값
+   * @returns 뺄셈 결과 (Decimal 인터페이스)
+   */
   private calculateSub(x: Decimal, y: Decimal): Decimal {
+    // 유효하지 않은 입력 체크
     if (!x.d || !y.d) {
       throw new Error('Invalid input')
     }
@@ -225,7 +304,7 @@ export class BroCalc implements Decimal {
     }
 
     const result: number[] = []
-    let borrow = 0
+    let borrow = 0 // 빌림
 
     const maxLength = Math.max(xd.length, yd.length)
 
@@ -253,6 +332,7 @@ export class BroCalc implements Decimal {
     }
 
     for (let i = maxLength - 1; i >= 0; i--) {
+      // 빌림 처리
       let diff = xd[i] - yd[i] - borrow
 
       if (diff < 0) {
@@ -265,6 +345,7 @@ export class BroCalc implements Decimal {
       result.unshift(diff)
     }
 
+    // 선행 0 제거
     while (result[0] === 0 && result.length > 1) {
       result.shift()
     }
@@ -276,41 +357,46 @@ export class BroCalc implements Decimal {
     }
   }
 
+  /**
+   * 곱셈 연산
+   * @param x 곱할 값
+   * @param y 곱할 값
+   * @returns 곱셈 결과 (Decimal 인터페이스)
+   */
   private calculateMul(x: Decimal, y: Decimal): Decimal {
+    // 유효하지 않은 입력 체크
     if (!x.d || !y.d) {
       throw new Error('Invalid input')
     }
 
     // 곱셈 항등원(1) 체크
-    if (this.isOne(y)) {
-      return x
-    }
-    if (this.isOne(x)) {
-      return y
-    }
+    if (this.isOne(y)) return x
+    if (this.isOne(x)) return y
 
     // 0과의 곱셈 최적화
-    if (this.isZero(x) || this.isZero(y)) {
-      return { d: [0], e: 0, s: 1 }
-    }
+    if (this.isZero(x) || this.isZero(y)) return { d: [0], e: 0, s: 1 }
 
     const sign = x.s * y.s
     const resultE = x.e + y.e
 
     let digits: number[] = []
 
+    // 어떠한 알고리즘을 사용하여 곱셈 연산을 수행할지 결정
     if (x.d.length + y.d.length < this.karatsubaThreshold) {
       digits = this.standardMultiply(x.d, y.d)
     } else {
       digits = this.karatsubaMultiply(x.d, y.d)
     }
 
-    let carry = 0
+    let carry = 0 // 올림
+
     for (let i = digits.length - 1; i >= 0; i--) {
       const temp = digits[i] + carry
       digits[i] = temp % this.base
       carry = Math.floor(temp / this.base)
     }
+
+    // 올림 처리
     if (carry > 0) digits.unshift(carry)
 
     return {
@@ -320,13 +406,61 @@ export class BroCalc implements Decimal {
     }
   }
 
+  /**
+   * 나눗셈 연산
+   * @param x 나눌 값
+   * @param y 나눌 값
+   * @returns 나눗셈 결과 (Decimal 인터페이스)
+   */
   private calculateDiv(x: Decimal, y: Decimal): Decimal {
+    // 유효하지 않은 입력 체크
     if (!y.d || this.isZero(y)) throw new Error('Division by zero')
     if (!x.d) throw new Error('Invalid dividend')
+
+    // 분모가 0인 경우 예외 처리
+    if (this.isZero(y)) throw new Error('Division by zero')
+
+    // 분자가 0인 경우 0을 반환
     if (this.isZero(x)) return { d: [0], e: 0, s: 1 }
 
     // 부호 처리
     const resultSign = x.s * y.s
+
+    // ! 여기서부터 직접 구현해야함
+    // *** concept 참고 ***
+    /**
+     * 1차 컨셉
+     *
+     * - 설정
+     * 우선 나눗셈은 오차가 없을 수가 없다. 단지 기본 오차범위 설정을 제공하고, 사용자 정의에서 오차 범위를 지정할 수 있도록 constructor에 허용 오차 범위를 기입한다.
+     * 기본 허용 오차는 0.000001로 한다. 퍼센트로 환산하면, 0.0001% 오차 범위를 허용한다. (정확도 99.9999%)
+     * 또한 유효 자릿수를 입력 받아서, 유효숫자 자릿수만큼만 d 배열에 저장되도록 한다. 예를 들어 유효숫자가 10이면, [12, 34567890] 이렇게 저장된다.
+     * 기본값으로는 유효숫자 자릿수를 10으로 한다.
+     * 반환값은 Decimal 인터페이스로 반환한다. (d, e, s)
+     *
+     * 구현 과정
+     * e^z = x / y
+     * z = ln(x / y)
+     * z = ln(x) - ln(y)
+     * Maclaurin Series를 이용하여 ln(x) = (x - 1) - (x - 1)^2/2 + (x - 1)^3/3 - (x - 1)^4/4 + ... 을 이용한다.
+     *
+     * isZero, isOne에 추가될 부분으로 로그 추가 (ln(1) = 0, ln(e) = 1)
+     *
+     * 따라서 만일 1 / 2를 구해야 한다면,
+     *
+     * 분자: 1, ln(1) = 0
+     * 분모: 2, ln(2) = 1 - 1/2 + 1/3 - 1/4 + ... <- 기본적으로 항은 30까지 더하자. 그리고 나서 실제 Math로 계산한 x/y값과 오차범위가 몇 %인지 확인하고 그 오차범위가 기본 허용 오차 이하라면 더 이상 항을 더하지 않는다.
+     *
+     * 따라서 ln(1 / 2) = ln(1) - ln(2) = 0 - (1 - 1/2 + 1/3 - 1/4 + ...) = -1 + 1/2 - 1/3 + 1/4 - ...
+     *
+     * 따라서 z = ln(1 / 2) = -1 + 1/2 - 1/3 + 1/4 - ... = -0.588 (항 10개까지 더한 경우)
+     *
+     * 따라서 e^z = e^(-1 + 1/2 - 1/3 + 1/4 - ...) = e^(...) ~ 5.554370487 * 10^(-1) (유효숫자 10자리)
+     *
+     * 지정 기본값: 자연상수 e = 2.7182818284 5904523536 0287471352 6624977572 4709369995 9574966967 6277240766 3035354759 4571382178 5251664274 2746639193 2003059921 8174135966 2904357290 0334295260 5956307381 3232862794 3490763233 8298807531 9525101901
+     */
+
+    // ! ======= 이하 생략 =======
     // 초기 지수 차이 계산
     let quotientExp = x.e - y.e
 
@@ -414,6 +548,11 @@ export class BroCalc implements Decimal {
 
   // ================================ Utility ================================
 
+  /**
+   * 부호 반전
+   * @param value 부호 반전할 값
+   * @returns 부호 반전된 값 (Decimal 인터페이스)
+   */
   private negate(value: Decimal): Decimal {
     return {
       d: value.d,
@@ -476,6 +615,11 @@ export class BroCalc implements Decimal {
     return result
   }
 
+  /**
+   * 입력값을 Decimal 인터페이스로 변환
+   * @param value 변환할 값
+   * @returns Decimal 인터페이스
+   */
   private parseInput(value: number | string): Decimal {
     this.isError(value)
 
@@ -549,6 +693,13 @@ export class BroCalc implements Decimal {
     }
   }
 
+  /**
+   * 표준 곱셈 연산
+   * @param xd 곱할 값
+   * @param yd 곱할 값
+   * @returns 곱셈 결과 (number[])
+   * @description 일반적인 곱셈 연산이기 때문에 작은 값에서는 카라추바 곱셈보다 효율적이나, 부동소수점 이슈가 있음
+   */
   private standardMultiply(xd: number[], yd: number[]): number[] {
     let x = 0
     let y = 0
@@ -571,6 +722,12 @@ export class BroCalc implements Decimal {
     return result.d
   }
 
+  /**
+   * 카라추바 곱셈 연산
+   * @param xd 곱할 값
+   * @param yd 곱할 값
+   * @returns 곱셈 결과 (number[])
+   */
   private karatsubaMultiply(xd: number[], yd: number[]): number[] {
     const n = Math.max(xd.length, yd.length)
 
@@ -638,57 +795,60 @@ export class BroCalc implements Decimal {
     return result.d
   }
 
-  private newtonRaphsonReciprocal(y: Decimal): Decimal {
-    const r0Digit = Math.floor(10 / y.d[0]) // y.d[0]가 2라면 r0Digit은 5
-    const r0Exp = -1 - y.e // y.e가 0이면 r0Exp는 -1
-    let r = {
-      d: [r0Digit],
-      e: r0Exp,
-      s: y.s,
-    }
-
-    for (let i = 0; i < 3; i++) {
-      const yr = this.calculateMul(y, r)
-      const two_minus_yr = this.calculateSub({ d: [2], e: 0, s: 1 }, yr)
-      r = this.calculateMul(r, two_minus_yr)
-    }
-
-    return r
-  }
-
+  /**
+   * 배열을 두 개의 배열로 나누는 함수
+   * @param arr 나눌 배열
+   * @param m 나눌 지점
+   * @returns 나눈 배열 (number[][])
+   */
   private split(arr: number[], m: number): number[][] {
     return [arr.slice(0, m), arr.slice(m)]
   }
 
+  /**
+   * 0인지 확인하는 함수
+   * @param x 확인할 값
+   * @returns 0인지 여부 (boolean)
+   */
   private isZero(x: BroCalc | Decimal): boolean {
     const d = x instanceof BroCalc ? x.getDecimal() : x
     return d.d.every((digit) => digit === 0)
   }
 
+  /**
+   * 1인지 확인하는 함수
+   * @param x 확인할 값
+   * @returns 1인지 여부 (boolean)
+   */
   private isOne(x: BroCalc | Decimal): boolean {
     const d = x instanceof BroCalc ? x.getDecimal() : x
     return d.d.length === 1 && d.d[0] === 1 && d.e === 0 && d.s === 1
   }
 
-  private isNegativeOne(x: Decimal): boolean {
-    return x.d.length === 1 && x.d[0] === 1 && x.e === 0 && x.s === -1
-  }
-
+  /**
+   * 에러 체크
+   * @param x 체크할 값
+   */
   private isError(x: string | number | BroCalc): void {
     if (typeof x === 'number') {
       if (x === Number.POSITIVE_INFINITY || x === Number.NEGATIVE_INFINITY) {
+        // Infinity 체크
         throw new Error('Multiple of Infinity is not allowed')
       } else if (isNaN(x)) {
+        // NaN 체크
         throw new Error(`Invalid input: ${x}`)
       }
     } else if (x instanceof BroCalc) {
+      // 배열 요소 체크
       for (let i = 0; i < x.d.length; i++) {
         if (
           x.d[i] === Number.POSITIVE_INFINITY ||
           x.d[i] === Number.NEGATIVE_INFINITY
         ) {
+          // Infinity 체크
           throw new Error('Multiple of Infinity is not allowed')
         } else if (isNaN(x.d[i])) {
+          // NaN 체크
           throw new Error(`Invalid input: ${x.d[i]}`)
         }
       }
@@ -712,6 +872,10 @@ export class BroCalc implements Decimal {
     }
   }
 
+  /**
+   * 정밀도 계산
+   * @returns 정밀도 (number)
+   */
   private getPrecision(): number {
     return Math.min(
       this.maxDigits,
@@ -719,6 +883,12 @@ export class BroCalc implements Decimal {
     )
   }
 
+  /**
+   * 덧셈 역원 체크
+   * @param x 체크할 값
+   * @param y 체크할 값
+   * @returns 덧셈 역원 여부 (boolean)
+   */
   private isAdditiveInverse(
     x: BroCalc | Decimal,
     y: BroCalc | Decimal,
@@ -733,7 +903,10 @@ export class BroCalc implements Decimal {
     )
   }
 
-  // 현재 BroCalc 인스턴스의 Decimal 값을 반환하는 헬퍼 메서드
+  /**
+   * BroCalc 인스턴스의 Decimal 값을 반환하는 헬퍼 메서드
+   * @returns Decimal 값
+   */
   private getDecimal(): Decimal {
     return {
       d: this.d,
@@ -742,6 +915,11 @@ export class BroCalc implements Decimal {
     }
   }
 
+  /**
+   * 정밀도에 맞게 반올림
+   * @param decimal 반올림할 값
+   * @returns 반올림된 값 (Decimal 인터페이스)
+   */
   private roundToPrecision(decimal: Decimal): Decimal {
     const digits = Math.floor(this.getPrecision() / this.logBase)
     const newD = decimal.d.slice(0, digits)
@@ -753,49 +931,12 @@ export class BroCalc implements Decimal {
     }
   }
 
-  private isGreaterOrEqual(x: Decimal, y: Decimal): boolean {
-    // 부호가 다른 경우
-    if (x.s !== y.s) {
-      return x.s > y.s
-    }
-
-    // 지수가 다른 경우
-    if (x.e !== y.e) {
-      return x.s === 1 ? x.e > y.e : x.e < y.e
-    }
-
-    // 자릿수가 다른 경우
-    if (x.d.length !== y.d.length) {
-      return x.s === 1 ? x.d.length > y.d.length : x.d.length < y.d.length
-    }
-
-    // 각 자릿수 비교
-    for (let i = 0; i < x.d.length; i++) {
-      if (x.d[i] !== y.d[i]) {
-        return x.s === 1 ? x.d[i] > y.d[i] : x.d[i] < y.d[i]
-      }
-    }
-
-    // 모든 자릿수가 같은 경우
-    return true
-  }
-
-  private setBit(number: number[], position: number): number[] {
-    const result = [...number]
-    const arrayIndex = Math.floor(position / this.logBase)
-    const bitPosition = position % this.logBase
-
-    // 필요한 경우 배열 확장
-    while (result.length <= arrayIndex) {
-      result.unshift(0)
-    }
-
-    // 해당 위치의 비트를 1로 설정
-    result[result.length - 1 - arrayIndex] |= 1 << bitPosition
-
-    return result
-  }
-
+  /**
+   * 첫 번째 배열이 두 번째 배열보다 큰지 확인
+   * @param first 첫 번째 배열
+   * @param second 두 번째 배열
+   * @returns 첫 번째 배열이 두 번째 배열보다 큰지 여부 (boolean)
+   */
   private isFirstBigger(first: number[], second: number[]): boolean {
     // 먼저 자릿수 비교
     if (first.length !== second.length) {
@@ -813,6 +954,13 @@ export class BroCalc implements Decimal {
     return false
   }
 
+  /**
+   * 새로운 BroCalc 인스턴스 생성
+   * @param d 배열
+   * @param e 지수
+   * @param s 부호
+   * @returns 생성된 BroCalc 인스턴스
+   */
   private createNewInstance(d: number[], e: number, s: number): BroCalc {
     const newBroCalc = Object.create(BroCalc.prototype)
     newBroCalc.d = d
@@ -821,6 +969,11 @@ export class BroCalc implements Decimal {
     return newBroCalc
   }
 
+  /**
+   * Decimal 값을 문자열로 변환
+   * @param decimal 변환할 값
+   * @returns 문자열
+   */
   private decimalToString(decimal: Decimal): string {
     if (!decimal.d) return 'NaN'
 
@@ -863,6 +1016,12 @@ export class BroCalc implements Decimal {
     return str + result
   }
 
+  /**
+   * 배열 빼기
+   * @param a 빼을 배열
+   * @param b 빼을 배열
+   * @returns 빼기 결과 (number[])
+   */
   private subtractArrays(a: number[], b: number[]): number[] {
     const result = a.slice()
     let borrow = 0
@@ -892,6 +1051,12 @@ export class BroCalc implements Decimal {
     return result
   }
 
+  /**
+   * 배열 비교
+   * @param a 비교할 배열
+   * @param b 비교할 배열
+   * @returns 비교 결과 (number)
+   */
   private compareArrays(a: number[], b: number[]): number {
     if (a.length !== b.length) {
       return a.length > b.length ? 1 : -1
