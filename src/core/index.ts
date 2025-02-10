@@ -18,7 +18,7 @@ export class BroCalc implements Decimal {
     this.base = 1e7
     this.logBase = 7
     this.maxDigits = 1e9
-    this.karatsubaThreshold = 4
+    this.karatsubaThreshold = 2
 
     const parsed = this.parseInput(value)
     this.d = parsed.d
@@ -79,6 +79,20 @@ export class BroCalc implements Decimal {
     const o = value instanceof BroCalc ? value : this.parseInput(value)
     const result = this.calculateDiv(this, o)
     return this.createNewInstance(result.d, result.e, result.s)
+  }
+
+  // *** 미구현 상태 ***
+  pow(value: number | string | BroCalc): BroCalc {
+    const o = value instanceof BroCalc ? value : this.parseInput(value)
+    // const result = this.calculatePow(this, o)
+    return this.createNewInstance(o.d, o.e, o.s)
+  }
+
+  // *** 미구현 상태 ***
+  sqrt(value: number | string | BroCalc): BroCalc {
+    const o = value instanceof BroCalc ? value : this.parseInput(value)
+    // const result = this.calculateSqrt(this, o)
+    return this.createNewInstance(o.d, o.e, o.s)
   }
 
   toString(): string {
@@ -562,6 +576,8 @@ export class BroCalc implements Decimal {
 
     if (n <= this.karatsubaThreshold) return this.standardMultiply(xd, yd)
 
+    console.log('karatsubaMultiply!!')
+
     const paddedXd = [...xd]
     const paddedYd = [...yd]
     while (paddedXd.length < n) paddedXd.unshift(0)
@@ -571,6 +587,11 @@ export class BroCalc implements Decimal {
 
     const [a, b] = this.split(paddedXd, splitPoint)
     const [c, d] = this.split(paddedYd, splitPoint)
+
+    console.log('a', a)
+    console.log('b', b)
+    console.log('c', c)
+    console.log('d', d)
 
     // m은 b의 실제 길이를 사용
     const m = b.length
@@ -599,7 +620,7 @@ export class BroCalc implements Decimal {
 
     const decimal_middle = this.calculateSub(
       { d: abcd, e: 0, s: 1 },
-      this.calculateAdd({ d: ac, e: 0, s: -1 }, { d: bd, e: 0, s: -1 }),
+      this.calculateAdd({ d: ac, e: 0, s: 1 }, { d: bd, e: 0, s: 1 }),
     )
 
     const poweredZ2 = this.adjustDigits(decimal_ac.d, e_ac)

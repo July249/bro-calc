@@ -169,228 +169,238 @@ describe('Get Decimal Interface', () => {
 // })
 
 // ********** Multiplication Part **********
-// describe('mul function', () => {
-//   it('multiply two positive numbers', () => {
-//     const x1 = new BroCalc(1000000)
-//     const x2 = new BroCalc(1000000)
-//     expect(x1.mul(x2)).toMatchObject({ d: [100000, 0], e: 0, s: 1 })
-//     expect(x1.mul(x2).toString()).toBe('1000000000000')
-//     const x3 = new BroCalc(10000000)
-//     const x4 = new BroCalc(10000000)
-//     expect(x3.mul(x4)).toMatchObject({ d: [1, 0, 0], e: 0, s: 1 })
-//     expect(x3.mul(x4).toString()).toBe('100000000000000')
-//     const x5 = new BroCalc(2)
-//     const x6 = new BroCalc(3)
-//     expect(x5.mul(x6)).toMatchObject({ d: [6], e: 0, s: 1 })
-//     expect(x5.mul(x6).toString()).toBe('6')
-//     const x7 = new BroCalc(20000)
-//     const x8 = new BroCalc(30000)
-//     expect(x7.mul(x8)).toMatchObject({ d: [60, 0], e: 0, s: 1 })
-//     expect(x7.mul(x8).toString()).toBe('600000000')
-//   })
-//   it('multiply two negative numbers', () => {
-//     const x1 = new BroCalc(-2)
-//     const x2 = new BroCalc(-3)
-//     expect(x1.mul(x2)).toMatchObject({ d: [6], e: 0, s: 1 })
-//     expect(x1.mul(x2).toString()).toBe('6')
-//   })
-//   it('multiply one positive and one negative number', () => {
-//     const x1 = new BroCalc(2)
-//     const x2 = new BroCalc(-3)
-//     expect(x1.mul(x2)).toMatchObject({ d: [6], e: 0, s: -1 })
-//     expect(x1.mul(x2).toString()).toBe('-6')
-//     const x3 = new BroCalc(-2)
-//     const x4 = new BroCalc(3)
-//     expect(x3.mul(x4)).toMatchObject({ d: [6], e: 0, s: -1 })
-//     expect(x3.mul(x4).toString()).toBe('-6')
-//   })
-//   it('multiply identity element', () => {
-//     const x1 = new BroCalc(123456789)
-//     const x2 = new BroCalc(1)
-//     expect(x1.mul(x2)).toMatchObject({ d: [12, 3456789], e: 0, s: 1 })
-//     expect(x1.mul(x2).toString()).toBe('123456789')
-//     const x3 = new BroCalc(-123456789)
-//     const x4 = new BroCalc(1)
-//     expect(x3.mul(x4)).toMatchObject({ d: [12, 3456789], e: 0, s: -1 })
-//     expect(x3.mul(x4).toString()).toBe('-123456789')
-//     const x5 = new BroCalc(Number.MAX_SAFE_INTEGER) // 9_007_199_254_740_991
-//     const x6 = new BroCalc(1)
-//     expect(x5.mul(x6)).toMatchObject({ d: [90, 719925, 4740991], e: 0, s: 1 })
-//     expect(x5.mul(x6).toString()).toBe('9007199254740991')
-//     const x7 = new BroCalc(-Number.MAX_SAFE_INTEGER) // -9_007_199_254_740_991
-//     const x8 = new BroCalc(1)
-//     expect(x7.mul(x8)).toMatchObject({ d: [90, 719925, 4740991], e: 0, s: -1 })
-//     expect(x7.mul(x8).toString()).toBe('-9007199254740991')
-//   })
-//   it('multiply inverse element', () => {
-//     const x1 = new BroCalc(10)
-//     const x2 = new BroCalc(0.1)
-//     expect(x1.mul(x2)).toMatchObject({ d: [10], e: -1, s: 1 })
-//     expect(x1.mul(x2).toString()).toBe('1.0')
-//     const x3 = new BroCalc(-10)
-//     const x4 = new BroCalc(-0.1)
-//     expect(x3.mul(x4)).toMatchObject({ d: [10], e: -1, s: 1 })
-//     expect(x3.mul(x4).toString()).toBe('1.0')
-//     const x5 = new BroCalc(0.125)
-//     const x6 = new BroCalc(8)
-//     expect(x5.mul(x6)).toMatchObject({ d: [1000], e: -3, s: 1 })
-//     expect(x5.mul(x6).toString()).toBe('1.000')
-//     const x7 = new BroCalc(-0.125)
-//     const x8 = new BroCalc(-8)
-//     expect(x7.mul(x8)).toMatchObject({ d: [1000], e: -3, s: 1 })
-//     expect(x7.mul(x8).toString()).toBe('1.000')
-//   })
-//   it('even the argument of mul function is over the 2^53 - 1, it should be calculated correctly', () => {
-//     console.log('final test')
-//     const test1 = new BroCalc(123456789)
-//     const test2 = new BroCalc(123456789)
-//     expect(test1.mul(test2)).toMatchObject({
-//       d: [152, 4157875, 190521],
-//       e: 0,
-//       s: 1,
-//     })
-//     expect(test1.mul(test2).toString()).toBe('15241578750190521')
+describe('mul function', () => {
+  //   it('multiply two positive numbers', () => {
+  //     const x1 = new BroCalc(1000000)
+  //     const x2 = new BroCalc(1000000)
+  //     expect(x1.mul(x2)).toMatchObject({ d: [100000, 0], e: 0, s: 1 })
+  //     expect(x1.mul(x2).toString()).toBe('1000000000000')
+  //     const x3 = new BroCalc(10000000)
+  //     const x4 = new BroCalc(10000000)
+  //     expect(x3.mul(x4)).toMatchObject({ d: [1, 0, 0], e: 0, s: 1 })
+  //     expect(x3.mul(x4).toString()).toBe('100000000000000')
+  //     const x5 = new BroCalc(2)
+  //     const x6 = new BroCalc(3)
+  //     expect(x5.mul(x6)).toMatchObject({ d: [6], e: 0, s: 1 })
+  //     expect(x5.mul(x6).toString()).toBe('6')
+  //     const x7 = new BroCalc(20000)
+  //     const x8 = new BroCalc(30000)
+  //     expect(x7.mul(x8)).toMatchObject({ d: [60, 0], e: 0, s: 1 })
+  //     expect(x7.mul(x8).toString()).toBe('600000000')
+  //   })
+  //   it('multiply two negative numbers', () => {
+  //     const x1 = new BroCalc(-2)
+  //     const x2 = new BroCalc(-3)
+  //     expect(x1.mul(x2)).toMatchObject({ d: [6], e: 0, s: 1 })
+  //     expect(x1.mul(x2).toString()).toBe('6')
+  //   })
+  //   it('multiply one positive and one negative number', () => {
+  //     const x1 = new BroCalc(2)
+  //     const x2 = new BroCalc(-3)
+  //     expect(x1.mul(x2)).toMatchObject({ d: [6], e: 0, s: -1 })
+  //     expect(x1.mul(x2).toString()).toBe('-6')
+  //     const x3 = new BroCalc(-2)
+  //     const x4 = new BroCalc(3)
+  //     expect(x3.mul(x4)).toMatchObject({ d: [6], e: 0, s: -1 })
+  //     expect(x3.mul(x4).toString()).toBe('-6')
+  //   })
+  //   it('multiply identity element', () => {
+  //     const x1 = new BroCalc(123456789)
+  //     const x2 = new BroCalc(1)
+  //     expect(x1.mul(x2)).toMatchObject({ d: [12, 3456789], e: 0, s: 1 })
+  //     expect(x1.mul(x2).toString()).toBe('123456789')
+  //     const x3 = new BroCalc(-123456789)
+  //     const x4 = new BroCalc(1)
+  //     expect(x3.mul(x4)).toMatchObject({ d: [12, 3456789], e: 0, s: -1 })
+  //     expect(x3.mul(x4).toString()).toBe('-123456789')
+  //     const x5 = new BroCalc(Number.MAX_SAFE_INTEGER) // 9_007_199_254_740_991
+  //     const x6 = new BroCalc(1)
+  //     expect(x5.mul(x6)).toMatchObject({ d: [90, 719925, 4740991], e: 0, s: 1 })
+  //     expect(x5.mul(x6).toString()).toBe('9007199254740991')
+  //     const x7 = new BroCalc(-Number.MAX_SAFE_INTEGER) // -9_007_199_254_740_991
+  //     const x8 = new BroCalc(1)
+  //     expect(x7.mul(x8)).toMatchObject({ d: [90, 719925, 4740991], e: 0, s: -1 })
+  //     expect(x7.mul(x8).toString()).toBe('-9007199254740991')
+  //   })
+  //   it('multiply inverse element', () => {
+  //     const x1 = new BroCalc(10)
+  //     const x2 = new BroCalc(0.1)
+  //     expect(x1.mul(x2)).toMatchObject({ d: [10], e: -1, s: 1 })
+  //     expect(x1.mul(x2).toString()).toBe('1.0')
+  //     const x3 = new BroCalc(-10)
+  //     const x4 = new BroCalc(-0.1)
+  //     expect(x3.mul(x4)).toMatchObject({ d: [10], e: -1, s: 1 })
+  //     expect(x3.mul(x4).toString()).toBe('1.0')
+  //     const x5 = new BroCalc(0.125)
+  //     const x6 = new BroCalc(8)
+  //     expect(x5.mul(x6)).toMatchObject({ d: [1000], e: -3, s: 1 })
+  //     expect(x5.mul(x6).toString()).toBe('1.000')
+  //     const x7 = new BroCalc(-0.125)
+  //     const x8 = new BroCalc(-8)
+  //     expect(x7.mul(x8)).toMatchObject({ d: [1000], e: -3, s: 1 })
+  //     expect(x7.mul(x8).toString()).toBe('1.000')
+  //   })
+  //   it('even the argument of mul function is over the 2^53 - 1, it should be calculated correctly', () => {
+  //     console.log('final test')
+  //     const test1 = new BroCalc(123456789)
+  //     const test2 = new BroCalc(123456789)
+  //     expect(test1.mul(test2)).toMatchObject({
+  //       d: [152, 4157875, 190521],
+  //       e: 0,
+  //       s: 1,
+  //     })
+  //     expect(test1.mul(test2).toString()).toBe('15241578750190521')
+  //     const test3 = new BroCalc('1234567890123456789012345678')
+  //     const test4 = new BroCalc('1234567890123456789012345678')
+  //     expect(test3.mul(test4)).toMatchObject({
+  //       d: [
+  //         152415, 7875323, 8836750, 4953515, 4031397, 6765279, 6829976, 5279684,
+  //       ],
+  //       e: 0,
+  //       s: 1,
+  //     })
+  //     expect(test3.mul(test4).toString()).toBe(
+  //       '1524157875323883675049535154031397676527968299765279684',
+  //     )
+  //     const x1 = new BroCalc(Number.MAX_SAFE_INTEGER) // 9_007_199_254_740_991
+  //     const x2 = new BroCalc(2)
+  //     expect(x1.mul(x2)).toMatchObject({ d: [180, 1439850, 9481982], e: 0, s: 1 })
+  //     expect(x1.mul(x2).toString()).toBe('18014398509481982')
+  //     const x3 = new BroCalc(Number.MAX_SAFE_INTEGER)
+  //     const x4 = new BroCalc(Number.MAX_SAFE_INTEGER)
+  //     expect(x3.mul(x4)).toMatchObject({
+  //       d: [8112, 9638414, 6066636, 8139049, 5662081],
+  //       e: 0,
+  //       s: 1,
+  //     })
+  //     expect(x3.mul(x4).toString()).toBe('81129638414606663681390495662081')
+  //   })
+  it('multiply more test cases', () => {
+    const x1 = new BroCalc('1234567890123456789012345678')
+    const x2 = new BroCalc('0.0000000000000000000000000001')
+    expect(x1.mul(x2)).toMatchObject({
+      d: [1234567, 8901234, 5678901, 2345678],
+      e: -28,
+      s: 1,
+    })
+    expect(x1.mul(x2).toString()).toBe('0.1234567890123456789012345678')
+  })
+  it('multiply many digits', () => {
+    const x1 = new BroCalc(
+      '99999999999999999999999999999999999999999999999999999',
+    )
+    const x2 = new BroCalc(
+      '0.0000000000000000000000000000000000000000000000000001',
+    )
+    expect(x1.mul(x2)).toMatchObject({
+      d: [9999, 9999999, 9999999, 9999999, 9999999, 9999999, 9999999, 9999999],
+      e: -52,
+      s: 1,
+    })
+    expect(x1.mul(x2).toString()).toBe(
+      '9.9999999999999999999999999999999999999999999999999999',
+    )
+  })
+})
 
-//     const test3 = new BroCalc('1234567890123456789012345678')
-//     const test4 = new BroCalc('1234567890123456789012345678')
-//     expect(test3.mul(test4)).toMatchObject({
-//       d: [
-//         152415, 7875323, 8836750, 4953515, 4031397, 6765279, 6829976, 5279684,
-//       ],
-//       e: 0,
-//       s: 1,
-//     })
-//     expect(test3.mul(test4).toString()).toBe(
-//       '1524157875323883675049535154031397676527968299765279684',
+// ********** Division Part **********
+// describe('div function', () => {
+// it('divide two positive numbers', () => {
+//   const x1 = new BroCalc(1)
+//   const x2 = new BroCalc(2)
+//   expect(x1.div(x2)).toMatchObject({ d: [5], e: -1, s: 1 })
+//   expect(x1.div(x2).toString()).toBe('0.5')
+// })
+// it('divide two negative numbers', () => {
+//   const x1 = new BroCalc(-1)
+//   const x2 = new BroCalc(-2)
+//   expect(x1.div(x2)).toMatchObject({ d: [5], e: -1, s: 1 })
+//   expect(x1.div(x2).toString()).toBe('0.5')
+// })
+// it('divide one positive and one negative number', () => {
+//   const x1 = new BroCalc(1)
+//   const x2 = new BroCalc(-2)
+//   expect(x1.div(x2)).toMatchObject({ d: [5], e: -1, s: -1 })
+//   expect(x1.div(x2).toString()).toBe('-0.5')
+//   const x3 = new BroCalc(-1)
+//   const x4 = new BroCalc(2)
+//   expect(x3.div(x4)).toMatchObject({ d: [5], e: -1, s: -1 })
+//   expect(x3.div(x4).toString()).toBe('-0.5')
+// })
+// it('divide identity element', () => {
+//   const x1 = new BroCalc(100)
+//   const x2 = new BroCalc(1)
+//   expect(x1.div(x2)).toMatchObject({ d: [100], e: 0, s: 1 })
+//   expect(x1.div(x2).toString()).toBe('100')
+//   const x3 = new BroCalc(1)
+//   const x4 = new BroCalc(100)
+//   expect(x3.div(x4)).toMatchObject({ d: [1], e: -2, s: -1 })
+//   expect(x3.div(x4).toString()).toBe('0.01')
+// })
+// it('divide inverse element', () => {
+//   const x1 = new BroCalc(0.1)
+//   const x2 = new BroCalc(1)
+//   expect(x1.div(x2)).toMatchObject({ d: [1], e: -1, s: 1 })
+//   expect(x1.div(x2).toString()).toBe('0.1')
+//   const x3 = new BroCalc(-0.1)
+//   const x4 = new BroCalc(-1)
+//   expect(x3.div(x4)).toMatchObject({ d: [1], e: -1, s: -1 })
+//   expect(x3.div(x4).toString()).toBe('-0.1')
+//   const x5 = new BroCalc(0.125)
+//   const x6 = new BroCalc(0.125)
+//   expect(x5.div(x6)).toMatchObject({ d: [1], e: 0, s: 1 })
+//   expect(x5.div(x6).toString()).toBe('1')
+//   const x7 = new BroCalc(Number.MAX_SAFE_INTEGER)
+//   const x8 = new BroCalc(Number.MAX_SAFE_INTEGER)
+//   expect(x7.div(x8)).toMatchObject({ d: [1], e: 0, s: 1 })
+//   expect(x7.div(x8).toString()).toBe('1')
+//   const x9 = new BroCalc(Number.MIN_SAFE_INTEGER)
+//   const x10 = new BroCalc(Number.MIN_SAFE_INTEGER)
+//   expect(x9.div(x10)).toMatchObject({ d: [1], e: 0, s: 1 })
+//   expect(x9.div(x10).toString()).toBe('1')
+// })
+// it('if denominator is 0, it should be throw an error', () => {
+//   const x1 = new BroCalc(1)
+//   const x2 = new BroCalc(0)
+//   expect(() => x1.div(x2)).toThrow('Division by zero is not allowed')
+// })
+// it('the case of infinite decimal, it should be return at the boundary of 10^-15 with rounding', () => {
+//   const x1 = new BroCalc(1)
+//   const x2 = new BroCalc(3)
+//   expect(x1.div(x2)).toMatchObject({ d: [3333333, 3333333], e: -15, s: 1 })
+//   expect(x1.div(x2).toString()).toBe('0.33333333333333')
+//   const x3 = new BroCalc(1)
+//   const x4 = new BroCalc(6)
+//   expect(x3.div(x4)).toMatchObject({ d: [1666666, 6666667], e: -15, s: 1 })
+//   expect(x3.div(x4).toString()).toBe('0.16666666666667')
+//   const x5 = new BroCalc(1)
+//   const x6 = new BroCalc(7)
+//   expect(x5.div(x6)).toMatchObject({ d: [1428571, 4285714], e: -15, s: 1 })
+//   expect(x5.div(x6).toString()).toBe('0.14285714285714')
+//   const x7 = new BroCalc(1)
+//   const x8 = new BroCalc(9)
+//   expect(x7.div(x8)).toMatchObject({ d: [1111111, 1111111], e: -15, s: 1 })
+//   expect(x7.div(x8).toString()).toBe('0.11111111111111')
+// })
+// })
+
+// ********** Power handling Part **********
+// describe('pow function', () => {
+//   it('should throw an error if the argument is negative', () => {
+//     expect(() => new BroCalc(-1).pow(2)).toThrow(
+//       'Power of negative number is not allowed',
 //     )
-
-//     const x1 = new BroCalc(Number.MAX_SAFE_INTEGER) // 9_007_199_254_740_991
-//     const x2 = new BroCalc(2)
-//     expect(x1.mul(x2)).toMatchObject({ d: [180, 1439850, 9481982], e: 0, s: 1 })
-//     expect(x1.mul(x2).toString()).toBe('18014398509481982')
-
-//     const x3 = new BroCalc(Number.MAX_SAFE_INTEGER)
-//     const x4 = new BroCalc(Number.MAX_SAFE_INTEGER)
-//     expect(x3.mul(x4)).toMatchObject({
-//       d: [8112, 9638414, 6066636, 8139049, 5662081],
-//       e: 0,
-//       s: 1,
-//     })
-//     expect(x3.mul(x4).toString()).toBe('81129638414606663681390495662081')
 //   })
 // })
 
-// ********** Division Part **********
-describe('div function', () => {
-  it('divide two positive numbers', () => {
-    const x1 = new BroCalc(1)
-    const x2 = new BroCalc(2)
-
-    expect(x1.div(x2)).toMatchObject({ d: [5], e: -1, s: 1 })
-    expect(x1.div(x2).toString()).toBe('0.5')
-  })
-
-  // it('divide two negative numbers', () => {
-  //   const x1 = new BroCalc(-1)
-  //   const x2 = new BroCalc(-2)
-
-  //   expect(x1.div(x2)).toMatchObject({ d: [5], e: -1, s: 1 })
-  //   expect(x1.div(x2).toString()).toBe('0.5')
-  // })
-
-  // it('divide one positive and one negative number', () => {
-  //   const x1 = new BroCalc(1)
-  //   const x2 = new BroCalc(-2)
-
-  //   expect(x1.div(x2)).toMatchObject({ d: [5], e: -1, s: -1 })
-  //   expect(x1.div(x2).toString()).toBe('-0.5')
-
-  //   const x3 = new BroCalc(-1)
-  //   const x4 = new BroCalc(2)
-
-  //   expect(x3.div(x4)).toMatchObject({ d: [5], e: -1, s: -1 })
-  //   expect(x3.div(x4).toString()).toBe('-0.5')
-  // })
-
-  // it('divide identity element', () => {
-  //   const x1 = new BroCalc(100)
-  //   const x2 = new BroCalc(1)
-
-  //   expect(x1.div(x2)).toMatchObject({ d: [100], e: 0, s: 1 })
-  //   expect(x1.div(x2).toString()).toBe('100')
-
-  //   const x3 = new BroCalc(1)
-  //   const x4 = new BroCalc(100)
-
-  //   expect(x3.div(x4)).toMatchObject({ d: [1], e: -2, s: -1 })
-  //   expect(x3.div(x4).toString()).toBe('0.01')
-  // })
-
-  // it('divide inverse element', () => {
-  //   const x1 = new BroCalc(0.1)
-  //   const x2 = new BroCalc(1)
-
-  //   expect(x1.div(x2)).toMatchObject({ d: [1], e: -1, s: 1 })
-  //   expect(x1.div(x2).toString()).toBe('0.1')
-
-  //   const x3 = new BroCalc(-0.1)
-  //   const x4 = new BroCalc(-1)
-
-  //   expect(x3.div(x4)).toMatchObject({ d: [1], e: -1, s: -1 })
-  //   expect(x3.div(x4).toString()).toBe('-0.1')
-
-  //   const x5 = new BroCalc(0.125)
-  //   const x6 = new BroCalc(0.125)
-
-  //   expect(x5.div(x6)).toMatchObject({ d: [1], e: 0, s: 1 })
-  //   expect(x5.div(x6).toString()).toBe('1')
-
-  //   const x7 = new BroCalc(Number.MAX_SAFE_INTEGER)
-  //   const x8 = new BroCalc(Number.MAX_SAFE_INTEGER)
-
-  //   expect(x7.div(x8)).toMatchObject({ d: [1], e: 0, s: 1 })
-  //   expect(x7.div(x8).toString()).toBe('1')
-
-  //   const x9 = new BroCalc(Number.MIN_SAFE_INTEGER)
-  //   const x10 = new BroCalc(Number.MIN_SAFE_INTEGER)
-
-  //   expect(x9.div(x10)).toMatchObject({ d: [1], e: 0, s: 1 })
-  //   expect(x9.div(x10).toString()).toBe('1')
-  // })
-
-  // it('if denominator is 0, it should be throw an error', () => {
-  //   const x1 = new BroCalc(1)
-  //   const x2 = new BroCalc(0)
-
-  //   expect(() => x1.div(x2)).toThrow('Division by zero is not allowed')
-  // })
-
-  // it('the case of infinite decimal, it should be return at the boundary of 10^-15 with rounding', () => {
-  //   const x1 = new BroCalc(1)
-  //   const x2 = new BroCalc(3)
-
-  //   expect(x1.div(x2)).toMatchObject({ d: [3333333, 3333333], e: -15, s: 1 })
-  //   expect(x1.div(x2).toString()).toBe('0.33333333333333')
-
-  //   const x3 = new BroCalc(1)
-  //   const x4 = new BroCalc(6)
-
-  //   expect(x3.div(x4)).toMatchObject({ d: [1666666, 6666667], e: -15, s: 1 })
-  //   expect(x3.div(x4).toString()).toBe('0.16666666666667')
-
-  //   const x5 = new BroCalc(1)
-  //   const x6 = new BroCalc(7)
-
-  //   expect(x5.div(x6)).toMatchObject({ d: [1428571, 4285714], e: -15, s: 1 })
-  //   expect(x5.div(x6).toString()).toBe('0.14285714285714')
-
-  //   const x7 = new BroCalc(1)
-  //   const x8 = new BroCalc(9)
-
-  //   expect(x7.div(x8)).toMatchObject({ d: [1111111, 1111111], e: -15, s: 1 })
-  //   expect(x7.div(x8).toString()).toBe('0.11111111111111')
-  // })
-})
+// ********** Square root handling Part **********
+// describe('sqrt function', () => {
+//   it('should throw an error if the argument is negative', () => {
+//     expect(() => new BroCalc(-1).sqrt()).toThrow(
+//       'Square root of negative number is not allowed',
+//     )
+//   })
+// })
 
 // ********** Error handling Part **********
 // describe('error handling', () => {
