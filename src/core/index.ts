@@ -5,6 +5,7 @@ interface Decimal {
   readonly d: number[] // 숫자를 담는 배열(끝에서부터 7자리씩 끊어서 저장)
   readonly e: number // 지수
   readonly s: number // 부호 (1 또는 -1)
+  readonly p?: number // 소수점 정밀도 (기본값 10), 소수점 몇 째자리까지 표시할지 결정
 }
 
 /**
@@ -19,21 +20,19 @@ export class BroCalc implements Decimal {
   private readonly base: number
   private readonly logBase: number
   private readonly karatsubaThreshold: number
-  private readonly maxDigits: number
+  private readonly precision: number
 
   // ================================ Constructor ================================
-  constructor(value: number | string | BroCalc = 0) {
+  constructor(value: number | string | BroCalc = 0, precision?: number) {
     if (!(this instanceof BroCalc)) {
       throw new Error('BroCalc must be called with the new operator')
     }
 
-    // 기본값 설정
     this.base = 1e7
     this.logBase = 7
-    this.maxDigits = 1e9
     this.karatsubaThreshold = 2
+    this.precision = precision || 10
 
-    // 값 초기화
     if (value instanceof BroCalc) {
       this.d = [...value.d]
       this.e = value.e
@@ -45,7 +44,6 @@ export class BroCalc implements Decimal {
       this.s = parsed.s
     }
 
-    // 불변성 보장
     Object.freeze(this.d)
     Object.freeze(this)
   }
@@ -57,20 +55,16 @@ export class BroCalc implements Decimal {
    * @param value 더할 값
    * @returns 덧셈 결과 (BroCalc 인스턴스)
    */
-  add(value: string | number | BroCalc): BroCalc {
-    const o = value instanceof BroCalc ? value : this.parseInput(value)
+  add(value: BroCalcValue): BroCalc {
+    const o = this.isBroCalc(value) ? value : this.parseInput(value)
     let result: Decimal = {
       d: [0],
       e: 0,
       s: 1,
     }
-    // ! 더할 수가 음수인지 판단해서 에러를 반환하는 것은 옳지 않은 것 같다. 테스트 코드로 확인해야 한다.
-    if (this.s === -1)
-      throw new Error(
-        'Negative number is not allowed. Use sub function instead.',
-      )
-
-    if (o.s === -1) {
+    if (this.s === -1 && o.s === 1) {
+      result = this.calculateSub(o, this)
+    } else if (this.s === 1 && o.s === -1) {
       result = this.calculateSub(this, o)
     } else {
       result = this.calculateAdd(this, o)
@@ -83,8 +77,8 @@ export class BroCalc implements Decimal {
    * @param value 뺄 값
    * @returns 뺄셈 결과 (BroCalc 인스턴스)
    */
-  sub(value: string | number | BroCalc): BroCalc {
-    const o = value instanceof BroCalc ? value : this.parseInput(value)
+  sub(value: BroCalcValue): BroCalc {
+    const o = this.isBroCalc(value) ? value : this.parseInput(value)
     let result: Decimal = {
       d: [0],
       e: 0,
@@ -117,7 +111,6 @@ export class BroCalc implements Decimal {
    * @param value 나눌 값
    * @returns 나눗셈 결과 (BroCalc 인스턴스)
    */
-  // *** 미구현 상태 ***
   div(value: number | string | BroCalc): BroCalc {
     const o = value instanceof BroCalc ? value : this.parseInput(value)
     const result = this.calculateDiv(this, o)
@@ -129,26 +122,28 @@ export class BroCalc implements Decimal {
    * @param value 거듭제곱할 값
    * @returns 거듭제곱 결과 (BroCalc 인스턴스)
    */
-  // *** 미구현 상태 ***
   pow(value: number | string | BroCalc): BroCalc {
     const o = value instanceof BroCalc ? value : this.parseInput(value)
-    // const result = this.calculatePow(this, o)
-    return this.createNewInstance(o.d, o.e, o.s)
+    const result = this.calculatePow(this, o)
+    return this.createNewInstance(result.d, result.e, result.s)
   }
 
   /**
-   * 제곱근 연산
-   * @param value 제곱근할 값
+   * n 제곱근 연산
+   * @param degree 제곱근 함수의 지수 (기본값 2)
    * @returns 제곱근 결과 (BroCalc 인스턴스)
    */
-  // *** 미구현 상태 ***
-  sqrt(value: number | string | BroCalc): BroCalc {
-    const o = value instanceof BroCalc ? value : this.parseInput(value)
-    // const result = this.calculateSqrt(this, o)
-    return this.createNewInstance(o.d, o.e, o.s)
+  sqrt(degree: number = 2): BroCalc {
+    const result = this.calculateNthRoot(this, degree)
+    return this.createNewInstance(result.d, result.e, result.s)
   }
 
   // ================================ Return Methods ================================
+
+  static from(value: BroCalcValue): BroCalc {
+    return new BroCalc(value)
+  }
+
   /**
    * 십진수를 문자열로 변환
    * @returns 문자열
@@ -158,11 +153,17 @@ export class BroCalc implements Decimal {
   }
 
   /**
-   * 십진수를 JSON 문자열로 변환
+   * Decimal 인스턴스를 JSON 문자열로 변환
    * @returns JSON 문자열
    */
-  toJSON(): string {
-    return this.toString()
+  toJSONString(): string {
+    const json = {
+      d: this.d,
+      e: this.e,
+      s: this.s,
+    }
+
+    return JSON.stringify(json)
   }
 
   /**
@@ -407,146 +408,307 @@ export class BroCalc implements Decimal {
   }
 
   /**
-   * 나눗셈 연산
-   * @param x 나눌 값
-   * @param y 나눌 값
-   * @returns 나눗셈 결과 (Decimal 인터페이스)
+   * 나눗셈 연산 (BigInt 기반 스케일링 방식)
+   * @param x 피제수 (Decimal)
+   * @param y 제수 (Decimal)
+   * @returns 나눗셈 결과 (Decimal)
    */
   private calculateDiv(x: Decimal, y: Decimal): Decimal {
-    // 유효하지 않은 입력 체크
-    if (!y.d || this.isZero(y)) throw new Error('Division by zero')
-    if (!x.d) throw new Error('Invalid dividend')
+    // 0 체크
+    if (!y.d || this.isZero(y))
+      throw new Error('Division by zero is not allowed')
+    if (!x.d || this.isZero(x)) return { d: [0], e: 0, s: 1 }
 
-    // 분모가 0인 경우 예외 처리
-    if (this.isZero(y)) throw new Error('Division by zero')
+    // 분모가 1인 경우
+    if (this.isOne(y)) return x
 
-    // 분자가 0인 경우 0을 반환
-    if (this.isZero(x)) return { d: [0], e: 0, s: 1 }
-
-    // 부호 처리
+    // 결과 부호: 피제수와 제수의 부호 곱
     const resultSign = x.s * y.s
 
-    // ! 여기서부터 직접 구현해야함
-    // *** concept 참고 ***
-    /**
-     * 1차 컨셉
-     *
-     * - 설정
-     * 우선 나눗셈은 오차가 없을 수가 없다. 단지 기본 오차범위 설정을 제공하고, 사용자 정의에서 오차 범위를 지정할 수 있도록 constructor에 허용 오차 범위를 기입한다.
-     * 기본 허용 오차는 0.000001로 한다. 퍼센트로 환산하면, 0.0001% 오차 범위를 허용한다. (정확도 99.9999%)
-     * 또한 유효 자릿수를 입력 받아서, 유효숫자 자릿수만큼만 d 배열에 저장되도록 한다. 예를 들어 유효숫자가 10이면, [12, 34567890] 이렇게 저장된다.
-     * 기본값으로는 유효숫자 자릿수를 10으로 한다.
-     * 반환값은 Decimal 인터페이스로 반환한다. (d, e, s)
-     *
-     * 구현 과정
-     * e^z = x / y
-     * z = ln(x / y)
-     * z = ln(x) - ln(y)
-     * Maclaurin Series를 이용하여 ln(x) = (x - 1) - (x - 1)^2/2 + (x - 1)^3/3 - (x - 1)^4/4 + ... 을 이용한다.
-     *
-     * isZero, isOne에 추가될 부분으로 로그 추가 (ln(1) = 0, ln(e) = 1)
-     *
-     * 따라서 만일 1 / 2를 구해야 한다면,
-     *
-     * 분자: 1, ln(1) = 0
-     * 분모: 2, ln(2) = 1 - 1/2 + 1/3 - 1/4 + ... <- 기본적으로 항은 30까지 더하자. 그리고 나서 실제 Math로 계산한 x/y값과 오차범위가 몇 %인지 확인하고 그 오차범위가 기본 허용 오차 이하라면 더 이상 항을 더하지 않는다.
-     *
-     * 따라서 ln(1 / 2) = ln(1) - ln(2) = 0 - (1 - 1/2 + 1/3 - 1/4 + ...) = -1 + 1/2 - 1/3 + 1/4 - ...
-     *
-     * 따라서 z = ln(1 / 2) = -1 + 1/2 - 1/3 + 1/4 - ... = -0.588 (항 10개까지 더한 경우)
-     *
-     * 따라서 e^z = e^(-1 + 1/2 - 1/3 + 1/4 - ...) = e^(...) ~ 5.554370487 * 10^(-1) (유효숫자 10자리)
-     *
-     * 지정 기본값: 자연상수 e = 2.7182818284 5904523536 0287471352 6624977572 4709369995 9574966967 6277240766 3035354759 4571382178 5251664274 2746639193 2003059921 8174135966 2904357290 0334295260 5956307381 3232862794 3490763233 8298807531 9525101901
-     */
+    // 원하는 유효 자릿수 (precision)
+    // (예를 들어, 기본값이 10이면 10자리 정밀도, 테스트 예제에서 유효숫자 40이 필요하면 precision을 40으로 설정)
+    const precision = this.precision
 
-    // ! ======= 이하 생략 =======
-    // 초기 지수 차이 계산
-    let quotientExp = x.e - y.e
+    // 인스턴스에 설정된 base와 logBase (base = 10^7, logBase = 7)
+    const logBase = this.logBase
+    const base = this.base
 
-    // 피제수와 제수의 배열 복사
-    const dividend = x.d.slice()
-    const divisor = y.d.slice()
-
-    // 선행 0 제거
-    while (dividend[0] === 0 && dividend.length > 1) dividend.shift()
-    while (divisor[0] === 0 && divisor.length > 1) divisor.shift()
-
-    // dividend < divisor 체크 부분 수정
-    if (this.compareArrays(dividend, divisor) < 0) {
-      // 여기서 바로 0을 반환하지 말고, 소수점 이하 자릿수를 계산해야 함
-      dividend.push(0) // 소수점 이하 계산을 위해 0을 추가
-      quotientExp-- // 지수 조정
-    }
-
-    const quotient: number[] = []
-    let remainder: number[] = []
-
-    // 장수 나눗셈 수행
-    for (let i = 0; i < dividend.length; i++) {
-      // 현재 자릿수를 remainder에 추가
-      remainder.push(dividend[i])
-
-      // remainder의 선행 0 제거
-      while (remainder[0] === 0 && remainder.length > 1) {
-        remainder.shift()
+    // ---------------------------
+    // 헬퍼 함수: d 배열을 BigInt 정수로 변환
+    const convertDigitsToBigInt = (digits: number[]): bigint => {
+      let result = 0n
+      const baseBigInt = 10n ** BigInt(logBase)
+      for (let i = 0; i < digits.length; i++) {
+        result = result * baseBigInt + BigInt(digits[i])
       }
+      return result
+    }
 
-      // 현재 remainder와 divisor를 비교하여 몫 계산
-      let qdigit = 0
-      console.log(
-        'this.compareArrays(remainder, divisor)',
-        this.compareArrays(remainder, divisor),
-      )
-      console.log('remainder', remainder)
-      console.log('divisor', divisor)
-      console.log('qdigit', qdigit)
-      while (this.compareArrays(remainder, divisor) >= 0) {
-        remainder = this.subtractArrays(remainder, divisor)
-        qdigit++
-
-        // BASE를 넘어가지 않도록 체크
-        if (qdigit >= this.base) {
-          throw new Error('Division result exceeds maximum digits')
-        }
+    // 헬퍼 함수: BigInt를 base(10^7) 단위의 숫자 배열로 변환
+    const bigIntToDigitArray = (num: bigint): number[] => {
+      const resultArray: number[] = []
+      const baseBigInt = BigInt(base)
+      if (num === 0n) return [0]
+      while (num > 0n) {
+        const remainder = num % baseBigInt
+        // 앞쪽(상위 자리)부터 넣기 위해 unshift
+        resultArray.unshift(Number(remainder))
+        num = num / baseBigInt
       }
+      return resultArray
+    }
+    // ---------------------------
 
-      quotient.push(qdigit)
+    // 1. d 배열을 BigInt 정수로 복원
+    const I_x = convertDigitsToBigInt(x.d)
+    const I_y = convertDigitsToBigInt(y.d)
+
+    // 2. 지수 차이: 실제 값은 I_x×10^(x.e)와 I_y×10^(y.e)를 곱한 값이므로,
+    //    나눗셈은 (I_x / I_y) × 10^(x.e - y.e)
+    const expDiff = x.e - y.e
+
+    // 3. 스케일링: 원하는 소수점 이하 자릿수(precision)를 확보하기 위해 분자에 10^(precision)을 곱함.
+    //    (즉, 내부적으로 정수 나눗셈을 수행할 때 소수점 이하 정밀도를 확보)
+    const scaledNumerator = I_x * 10n ** BigInt(precision)
+
+    // 4. BigInt 정수 나눗셈: BigInt의 '/' 연산자는 정수 몫만 반환합니다.
+    let Q = scaledNumerator / I_y
+
+    // 5. 예비 결과 지수: 스케일링했으므로, 최종 결과는 Q × 10^(expDiff - precision)
+    let resultExponent = expDiff - precision
+
+    // 6. 정규화: Q에 10의 인수가 남아 있다면 (즉, trailing zero가 있다면) 제거하고, 그만큼 결과 지수를 보정합니다.
+    while (Q % 10n === 0n && Q !== 0n) {
+      Q = Q / 10n
+      resultExponent += 1
     }
 
-    // 결과의 선행 0 제거
-    while (quotient[0] === 0 && quotient.length > 1) {
-      quotient.shift()
+    // 7. BigInt Q를 d 배열 (base 10^7 단위)로 분할
+    let resultDigits = bigIntToDigitArray(Q)
+
+    // (옵션) 선행 0 제거: 여러 자릿수를 갖는 경우 앞의 불필요한 0을 제거합니다.
+    while (resultDigits.length > 1 && resultDigits[0] === 0) {
+      resultDigits.shift()
     }
 
-    // 후행 0 제거
-    while (quotient[quotient.length - 1] === 0 && quotient.length > 1) {
-      quotient.pop()
-    }
-
-    // 자릿수 조정
-    let adjustedQuotient = quotient
-    let adjustedExp = quotientExp
-
-    console.log('adjustedQuotient', adjustedQuotient)
-    console.log('adjustedExp', adjustedExp)
-
-    // BASE(10^7) 기준으로 자릿수 조정
-    while (adjustedQuotient[0] >= this.base) {
-      const carry = Math.floor(adjustedQuotient[0] / this.base)
-      adjustedQuotient[0] %= this.base
-      adjustedQuotient.unshift(carry)
-      adjustedExp += this.logBase
-    }
-
+    // 8. 최종 결과 반환
     return {
-      d: adjustedQuotient,
-      e: adjustedExp,
+      d: resultDigits,
+      e: resultExponent,
       s: resultSign,
     }
   }
 
+  /**
+   * 정수 지수의 거듭제곱을 BigInt 기반 반복 제곱법으로 계산하는 메서드
+   * 음의 지수인 경우, 1/(x^|n|)로 계산합니다.
+   * @param x 밑 (BroCalc 또는 Decimal)
+   * @param exp 거듭제곱할 지수 (number | string | BroCalc)
+   * @returns 거듭제곱 결과 (Decimal 인스턴스)
+   */
+  private calculatePow(x: Decimal, exp: number | string | Decimal): Decimal {
+    // exp를 정수로 변환
+    let exponent: number
+
+    if (typeof exp === 'number') {
+      exponent = exp
+    } else if (typeof exp === 'string') {
+      exponent = parseInt(exp, 10)
+    } else {
+      // exp가 BroCalc 또는 Decimal인 경우,
+      if (exp.e !== 0 || exp.d.length !== 1) {
+        throw new Error(
+          'Non-integer exponent is not supported in this implementation.',
+        )
+      }
+      exponent = exp.d[0] * exp.s
+    }
+
+    // 음의 지수 처리: x^(-n) = 1 / (x^n)
+    if (exponent < 0) {
+      // 먼저 양의 지수에 대해 거듭제곱을 계산
+      const positivePow = this.calculatePow(x, -exponent)
+      // 1을 고정소수점 표현으로 나타낸 값 (즉, 1 = { d: [1], e: 0, s: 1 })
+      const one: Decimal = { d: [1], e: 0, s: 1 }
+      // calculateDiv를 사용해 1 / (x^n)를 계산합니다.
+      return this.calculateDiv(one, positivePow)
+    }
+
+    // 여기부터는 exponent가 0 이상인 경우 (양의 정수 지수)
+    // 헬퍼: d 배열을 BigInt로 변환하는 함수
+    const convertDigitsToBigInt = (digits: number[]): bigint => {
+      let result = 0n
+      const baseBigInt = 10n ** BigInt(this.logBase)
+      for (let i = 0; i < digits.length; i++) {
+        result = result * baseBigInt + BigInt(digits[i])
+      }
+      return result
+    }
+
+    // 헬퍼: BigInt를 d 배열 (base 10^7 단위)로 변환하는 함수
+    const bigIntToDigitArray = (num: bigint): number[] => {
+      const resultArray: number[] = []
+      const baseBigInt = BigInt(this.base)
+      if (num === 0n) return [0]
+      while (num > 0n) {
+        const remainder = num % baseBigInt
+        resultArray.unshift(Number(remainder))
+        num = num / baseBigInt
+      }
+      return resultArray
+    }
+
+    // 1. 밑 x의 d 배열을 BigInt 정수 I_x로 복원
+    const I_x = convertDigitsToBigInt(x.d)
+
+    // 2. 반복 제곱법을 이용하여 I_x^exponent 계산
+    let resultBigInt = 1n
+    let baseBigInt = I_x
+    let expBigInt = BigInt(exponent)
+    while (expBigInt > 0n) {
+      if (expBigInt % 2n === 1n) {
+        resultBigInt *= baseBigInt
+      }
+      baseBigInt *= baseBigInt
+      expBigInt /= 2n
+    }
+
+    // 3. 최종 지수 계산: x의 값은 I_x * 10^(x.e)이므로,
+    //    x^n = I_x^n * 10^(n * x.e)
+    const resultExponent = exponent * x.e
+
+    // 4. 결과 부호: x.s^n (n이 짝수면 양수, 홀수이면 원래 부호)
+    const resultSign = exponent % 2 === 0 ? 1 : x.s
+
+    // 5. BigInt 결과를 d 배열로 변환
+    const resultDigits = bigIntToDigitArray(resultBigInt)
+
+    // 6. 최종 결과 반환
+    return { d: resultDigits, e: resultExponent, s: resultSign }
+  }
+
+  /**
+   * 일반 n제곱근 (nth root)을 계산하는 메서드
+   * (예: n=2이면 제곱근, n=3이면 세제곱근 등)
+   * 음수 또는 0인 degree는 지원하지 않습니다.
+   * @param x n제곱근을 구할 값 (Decimal)
+   * @param degree 제곱근의 차수 (n), 양의 정수만 지원
+   * @returns n제곱근 결과 (Decimal)
+   */
+  private calculateNthRoot(x: Decimal, degree: number): Decimal {
+    // degree가 양의 정수가 아니면 에러 처리
+    if (degree <= 0) {
+      throw new Error('Only positive root degrees are supported.')
+    }
+
+    // 음수에 대해서: 만약 degree가 짝수이면 허용하지 않고, 홀수이면 절대값으로 계산한 후 결과 부호를 -1로 설정
+    if (x.s < 0) {
+      if (degree % 2 === 0) {
+        throw new Error('Even root of negative number is not supported.')
+      }
+      // 음수이면 절대값으로 계산하고, 최종 부호는 -1로 설정
+      x = { d: x.d, e: x.e, s: -1 }
+    }
+    // x가 0이면 결과도 0
+    if (this.isZero(x)) {
+      return { d: [0], e: 0, s: 1 }
+    }
+
+    // 원하는 소수점 이하 정밀도 (this.precision, 예: 10자리)
+    const p = this.precision
+
+    // 스케일링:
+    // n제곱근을 구하기 위해 최소한 10^(n*p)의 정밀도가 필요하므로,
+    // totalScale = x.e + n*p + extra, 여기서 extra는 x.e + n*p가 음수일 경우 이를 보정하고,
+    // 또한 extra는 degree의 배수가 되도록 조정합니다.
+    let extra = 0
+    if (x.e + degree * p < 0) {
+      extra = -(x.e + degree * p)
+    }
+    if (extra % degree !== 0) {
+      extra += degree - (extra % degree)
+    }
+    const totalScale = x.e + degree * p + extra // 이제 totalScale ≥ 0, degree의 배수
+
+    // 헬퍼: d 배열을 BigInt 정수로 복원
+    const convertDigitsToBigInt = (digits: number[]): bigint => {
+      let result = 0n
+      const baseBigInt = 10n ** BigInt(this.logBase)
+      for (let i = 0; i < digits.length; i++) {
+        result = result * baseBigInt + BigInt(digits[i])
+      }
+      return result
+    }
+
+    // 헬퍼: BigInt를 d 배열 (base 10^7 단위)로 변환
+    const bigIntToDigitArray = (num: bigint): number[] => {
+      const resultArray: number[] = []
+      const baseBigInt = BigInt(this.base)
+      if (num === 0n) return [0]
+      while (num > 0n) {
+        const remainder = num % baseBigInt
+        resultArray.unshift(Number(remainder))
+        num = num / baseBigInt
+      }
+      return resultArray
+    }
+
+    // 1. x의 d 배열을 BigInt 정수 I로 복원
+    const I = convertDigitsToBigInt(x.d)
+    // 2. 스케일링: N = I * 10^(totalScale)
+    const N = I * 10n ** BigInt(totalScale)
+
+    // 3. n제곱근을 구하는 함수 (Newton–Raphson 반복)
+    const integerNthRoot = (num: bigint, n: number): bigint => {
+      if (num < 0n) {
+        throw new Error('Cannot compute root of negative number')
+      }
+      if (num < 2n) return num
+      // 초기 추정: 10^(자릿수/n)
+      const numStr = num.toString()
+      const initExp = BigInt(Math.ceil(numStr.length / n))
+      let r = 10n ** initExp
+      while (true) {
+        let rPow = 1n
+        for (let i = 0; i < n - 1; i++) {
+          rPow *= r
+        }
+        if (rPow === 0n) break
+        const r_next = (BigInt(n - 1) * r + num / rPow) / BigInt(n)
+        // 반복 종료 조건: 변화가 매우 작으면 종료 (여기서는 차이가 1 이하이면 종료)
+        if (r > r_next ? r - r_next <= 1n : r_next - r <= 1n) {
+          r = r_next
+          break
+        }
+        r = r_next
+      }
+      return r
+    }
+
+    // 4. N의 n제곱근 정수 근사 R를 구함
+    const R = integerNthRoot(N, degree)
+
+    // 5. 스케일 보정:
+    //    최종 값은 R / 10^(p + extra/degree)로 보정되어야 하며,
+    //    따라서 최종 고정소수점 지수는 totalScale/degree - (p + extra/degree)
+    const divisor = 10n ** BigInt(p + extra / degree)
+    const finalBigInt = R / divisor
+    const resultExponent = totalScale / degree - (p + extra / degree)
+
+    // 6. 결과 부호: x가 음수이고 degree가 홀수이면 -1, 아니면 1.
+    const resultSign = x.s // 여기서 x.s가 이미 절대값으로 처리되어 있고, 부호는 그대로 적용
+
+    // 7. BigInt 결과를 d 배열로 변환하여 최종 Decimal 반환
+    const resultDigits = bigIntToDigitArray(finalBigInt)
+
+    return { d: resultDigits, e: resultExponent, s: resultSign }
+  }
+
   // ================================ Utility ================================
+
+  private normalizeDigits(digits: number[], offset: number): number[] {
+    return offset === 0 ? [...digits] : this.adjustDigits([...digits], offset)
+  }
 
   /**
    * 부호 반전
@@ -731,9 +893,7 @@ export class BroCalc implements Decimal {
   private karatsubaMultiply(xd: number[], yd: number[]): number[] {
     const n = Math.max(xd.length, yd.length)
 
-    if (n <= this.karatsubaThreshold) return this.standardMultiply(xd, yd)
-
-    console.log('karatsubaMultiply!!')
+    if (n < this.karatsubaThreshold) return this.standardMultiply(xd, yd)
 
     const paddedXd = [...xd]
     const paddedYd = [...yd]
@@ -744,11 +904,6 @@ export class BroCalc implements Decimal {
 
     const [a, b] = this.split(paddedXd, splitPoint)
     const [c, d] = this.split(paddedYd, splitPoint)
-
-    console.log('a', a)
-    console.log('b', b)
-    console.log('c', c)
-    console.log('d', d)
 
     // m은 b의 실제 길이를 사용
     const m = b.length
@@ -811,7 +966,7 @@ export class BroCalc implements Decimal {
    * @returns 0인지 여부 (boolean)
    */
   private isZero(x: BroCalc | Decimal): boolean {
-    const d = x instanceof BroCalc ? x.getDecimal() : x
+    const d = this.toDecimal(x)
     return d.d.every((digit) => digit === 0)
   }
 
@@ -821,7 +976,7 @@ export class BroCalc implements Decimal {
    * @returns 1인지 여부 (boolean)
    */
   private isOne(x: BroCalc | Decimal): boolean {
-    const d = x instanceof BroCalc ? x.getDecimal() : x
+    const d = this.toDecimal(x)
     return d.d.length === 1 && d.d[0] === 1 && d.e === 0 && d.s === 1
   }
 
@@ -829,7 +984,7 @@ export class BroCalc implements Decimal {
    * 에러 체크
    * @param x 체크할 값
    */
-  private isError(x: string | number | BroCalc): void {
+  private isError(x: BroCalcValue): void {
     if (typeof x === 'number') {
       if (x === Number.POSITIVE_INFINITY || x === Number.NEGATIVE_INFINITY) {
         // Infinity 체크
@@ -873,17 +1028,6 @@ export class BroCalc implements Decimal {
   }
 
   /**
-   * 정밀도 계산
-   * @returns 정밀도 (number)
-   */
-  private getPrecision(): number {
-    return Math.min(
-      this.maxDigits,
-      this.d.length * this.logBase + this.d.length * this.logBase,
-    )
-  }
-
-  /**
    * 덧셈 역원 체크
    * @param x 체크할 값
    * @param y 체크할 값
@@ -893,8 +1037,8 @@ export class BroCalc implements Decimal {
     x: BroCalc | Decimal,
     y: BroCalc | Decimal,
   ): boolean {
-    const dx = x instanceof BroCalc ? x.getDecimal() : x
-    const dy = y instanceof BroCalc ? y.getDecimal() : y
+    const dx = this.toDecimal(x)
+    const dy = this.toDecimal(y)
     return (
       dx.e === dy.e &&
       dx.d.length === dy.d.length &&
@@ -912,22 +1056,6 @@ export class BroCalc implements Decimal {
       d: this.d,
       e: this.e,
       s: this.s,
-    }
-  }
-
-  /**
-   * 정밀도에 맞게 반올림
-   * @param decimal 반올림할 값
-   * @returns 반올림된 값 (Decimal 인터페이스)
-   */
-  private roundToPrecision(decimal: Decimal): Decimal {
-    const digits = Math.floor(this.getPrecision() / this.logBase)
-    const newD = decimal.d.slice(0, digits)
-
-    return {
-      d: newD,
-      e: decimal.e,
-      s: decimal.s,
     }
   }
 
@@ -1010,64 +1138,16 @@ export class BroCalc implements Decimal {
         }
       }
     }
-
-    console.log('str + result', str + result)
-
     return str + result
   }
 
-  /**
-   * 배열 빼기
-   * @param a 빼을 배열
-   * @param b 빼을 배열
-   * @returns 빼기 결과 (number[])
-   */
-  private subtractArrays(a: number[], b: number[]): number[] {
-    const result = a.slice()
-    let borrow = 0
-    let aIndex = result.length - 1
-    let bIndex = b.length - 1
-
-    while (bIndex >= 0 || borrow) {
-      const subtrahend = (bIndex >= 0 ? b[bIndex] : 0) + borrow
-
-      if (result[aIndex] < subtrahend) {
-        result[aIndex] += this.base
-        borrow = 1
-      } else {
-        borrow = 0
-      }
-
-      result[aIndex] = result[aIndex] - subtrahend
-      aIndex--
-      bIndex--
-    }
-
-    // 선행 0 제거
-    while (result[0] === 0 && result.length > 1) {
-      result.shift()
-    }
-
-    return result
+  private toDecimal(value: BroCalc | Decimal): Decimal {
+    return this.isBroCalc(value) ? value.getDecimal() : value
   }
 
-  /**
-   * 배열 비교
-   * @param a 비교할 배열
-   * @param b 비교할 배열
-   * @returns 비교 결과 (number)
-   */
-  private compareArrays(a: number[], b: number[]): number {
-    if (a.length !== b.length) {
-      return a.length > b.length ? 1 : -1
-    }
-
-    for (let i = 0; i < a.length; i++) {
-      if (a[i] !== b[i]) {
-        return a[i] > b[i] ? 1 : -1
-      }
-    }
-
-    return 0
+  private isBroCalc(value: any): value is BroCalc {
+    return value instanceof BroCalc
   }
 }
+
+type BroCalcValue = number | string | BroCalc
