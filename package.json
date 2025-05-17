@@ -1,0 +1,27 @@
+{
+  "name": "numbra",
+  "type": "module",
+  "private": true,
+  "version": "0.0.1",
+  "main": "./src/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/July249/numbra.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/July249/numbra/issues"
+  },
+  "homepage": "https://github.com/July249/numbra#readme",
+  "description": "",
+  "devDependencies": {
+    "@types/node": "^22.15.18",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  }
+}
