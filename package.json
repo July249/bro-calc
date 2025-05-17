@@ -1,27 +1,37 @@
 {
   "name": "numbra",
+  "private": false,
+  "version": "0.0.0",
   "type": "module",
-  "private": true,
-  "version": "0.0.1",
-  "main": "./src/index.js",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "vite",
+    "build": "tsc --emitDeclarationOnly --declaration --declarationDir dist && vite build",
+    "preview": "vite preview",
+    "publish:patch": "./scripts/publish.sh patch",
+    "publish:minor": "./scripts/publish.sh minor",
+    "publish:major": "./scripts/publish.sh major",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/July249/numbra.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/July249/numbra/issues"
-  },
-  "homepage": "https://github.com/July249/numbra#readme",
-  "description": "",
   "devDependencies": {
+    "@eslint/js": "^9.27.0",
+    "@types/jest": "^29.5.12",
     "@types/node": "^22.15.18",
+    "eslint": "^9.27.0",
+    "eslint-plugin-import": "^2.31.0",
+    "globals": "^16.1.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.2",
     "ts-node": "^10.9.2",
-    "typescript": "^5.8.3"
+    "typescript": "~5.8.3",
+    "typescript-eslint": "^8.32.1",
+    "vite": "^6.3.5"
   }
 }

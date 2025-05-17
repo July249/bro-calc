@@ -1,3 +1,2 @@
-export const numbra = () => {
-  return "Hello, world!";
-};
+export * from './core/numbra'
+export * from './interface/numbraDecimal.interface'
