@@ -1,1 +1,0 @@
-export { BroCalc } from '@/core'
