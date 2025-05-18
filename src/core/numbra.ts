@@ -1,5 +1,20 @@
+import { NumbraConstant } from '../constants/numbra'
 import { NumbraDecimal } from '../interface'
+import {
+  eNotationToDecimal,
+  splitSignAndMantissa,
+  toDigitChunks,
+  adjustDigits,
+  splitToIntegerAndDecimal,
+  convertDigitsToBigInt,
+  bigIntToDigitArray,
+  getPrecisionScale,
+  equal,
+} from '../utils/numbra'
 
+import type { NumbraValue } from '../types'
+
+import { Calculable } from '@/types/calculable.type'
 /**
  * 고정밀도 십진 연산을 위한 클래스
  */
@@ -8,37 +23,18 @@ export class Numbra implements NumbraDecimal {
   readonly d: number[]
   readonly e: number
   readonly s: number
+  readonly precision: number
 
   private readonly base: number
   private readonly logBase: number
   private readonly karatsubaThreshold: number
-  private readonly precision: number
-
-  private static readonly reservedMathSignRegexes: RegExp[] = [
-    // 기본 산술 연산자 (숫자 사이에 위치)
-    /\d+[+\-*/%^]\d+/,
-    // 거듭제곱 연산자 '**'
-    /\d+\*{2}\d+/,
-    // 나눗셈 연산자 '//'
-    /\d+\/{2}\d+/,
-    // 팩토리얼 (숫자 뒤에만 위치)
-    /\d+!/,
-    // sqrt 함수 (소괄호로 값을 표현)
-    /sqrt(\d+)/,
-    // 절대값 (파이프 사이에 음수 또는 양수)
-    /\|[+-]?\d+\|/,
-  ]
 
   // ================================ Constructor ================================
-  constructor(value: number | string | Numbra = 0, precision?: number) {
-    if (!(this instanceof Numbra)) {
-      throw new Error('Numbra must be called with the new operator')
-    }
-
-    this.base = 1e7
-    this.logBase = 7
-    this.karatsubaThreshold = 2
-    this.precision = precision || 10
+  constructor(value: NumbraValue = 0, precision?: number) {
+    this.base = NumbraConstant.BASE
+    this.logBase = NumbraConstant.LOG_BASE
+    this.karatsubaThreshold = NumbraConstant.KARATSUBA_THRESHOLD
+    this.precision = precision ?? NumbraConstant.PRECISION
 
     if (value instanceof Numbra) {
       this.d = [...value.d]
@@ -64,6 +60,11 @@ export class Numbra implements NumbraDecimal {
    */
   add(value: NumbraValue): Numbra {
     const o = this.isNumbra(value) ? value : this.parseInput(value)
+
+    const specialCase = this.handleSpecialCases(this, o, false)
+    if (specialCase)
+      return this.createNewInstance(specialCase.d, specialCase.e, specialCase.s)
+
     let result: NumbraDecimal = {
       d: [0],
       e: 0,
@@ -86,23 +87,26 @@ export class Numbra implements NumbraDecimal {
    */
   sub(value: NumbraValue): Numbra {
     const o = this.isNumbra(value) ? value : this.parseInput(value)
+
+    const specialCase = this.handleSpecialCases(this, o, true)
+    if (specialCase)
+      return this.createNewInstance(specialCase.d, specialCase.e, specialCase.s)
+
     let result: NumbraDecimal = {
       d: [0],
       e: 0,
       s: 1,
     }
 
-    if (this.s !== o.s) {
-      console.log('hello1')
+    if (this.s === -1 && o.s === 1) {
+      // Case 1: this가 음수, o가 양수
+      const n = this.negate(this)
+      result = this.calculateSub(n, o)
+      result = this.negate(result)
+    } else if ((this.s === 1 && o.s === -1) || this.s === o.s) {
+      // Case 2: this가 양수, o가 음수 또는 부호가 같은 경우
       const n = this.negate(o)
-      result = this.calculateAdd(this, n)
-    } else if (!this.isFirstBigger(this, o)) {
-      console.log('hello2')
-      const n = this.negate(o)
-      result = this.calculateAdd(n, this)
-    } else {
-      console.log('hello3')
-      result = this.calculateSub(this, o)
+      result = this.calculateSub(this, n)
     }
 
     return this.createNewInstance(result.d, result.e, result.s)
@@ -183,8 +187,8 @@ export class Numbra implements NumbraDecimal {
    * 십진수를 문자열로 변환
    * @returns 문자열
    */
-  toString(): string {
-    return this.decimalToString(this)
+  toString(): Calculable {
+    return this.decimalToCalculable(this)
   }
 
   /**
@@ -208,7 +212,9 @@ export class Numbra implements NumbraDecimal {
    */
   [Symbol.toPrimitive](hint: 'string' | 'number' | 'default'): string {
     if (hint === 'number') {
-      throw new Error('Numbra cannot be converted to a number to prevent floating point issues')
+      throw new Error(
+        'Numbra cannot be converted to a number to prevent floating point issues',
+      )
     }
     return this.toString()
   }
@@ -222,142 +228,32 @@ export class Numbra implements NumbraDecimal {
    * @returns 덧셈 결과 (NumbraDecimal 인터페이스)
    */
   private calculateAdd(x: NumbraDecimal, y: NumbraDecimal): NumbraDecimal {
-    // 유효하지 않은 입력 체크
-    if (!x.d || !y.d) {
-      throw new Error('Invalid input')
-    }
+    // 정수부와 소수부 분리
+    const xSplit = splitToIntegerAndDecimal(x, this.logBase)
+    const ySplit = splitToIntegerAndDecimal(y, this.logBase)
 
-    // 덧셈 항등원(0) 체크
-    if (this.isZero(y)) return x
-    if (this.isZero(x)) return y
+    // 소수점 자릿수 맞추기
+    const maxDecimalPlaces = Math.max(
+      xSplit.decimalPlaces,
+      ySplit.decimalPlaces,
+    )
+    const xDecimal =
+      xSplit.decimalPart *
+      10n ** BigInt(maxDecimalPlaces - xSplit.decimalPlaces)
+    const yDecimal =
+      ySplit.decimalPart *
+      10n ** BigInt(maxDecimalPlaces - ySplit.decimalPlaces)
 
-    // 덧셈 역원 체크
-    if (this.isAdditiveInverse(x, y)) return { d: [0], e: 0, s: 1 }
+    // 부호 처리
+    const xSign = BigInt(x.s)
+    const ySign = BigInt(y.s)
 
-    const newE = Math.min(x.e, y.e)
-    let xd = [...x.d]
-    let yd = [...y.d]
+    // 정수부와 소수부 각각 계산
+    const integerSum = xSign * xSplit.integerPart + ySign * ySplit.integerPart
+    const decimalSum = xSign * xDecimal + ySign * yDecimal
 
-    if (x.e < y.e) {
-      // y의 자릿수 조정
-      const offsetY = y.e - newE
-      yd = this.adjustDigits(yd, offsetY)
-    } else if (y.e < x.e) {
-      // x의 자릿수 조정
-
-      const offsetX = x.e - newE
-      xd = this.adjustDigits(xd, offsetX)
-    }
-
-    const result: number[] = []
-    let carry = 0
-    const maxLength = Math.max(xd.length, yd.length)
-
-    // 부호 처리 로직 수정
-    let resultSign = 1 // 기본값을 1로 설정
-
-    if (x.s === y.s) {
-      resultSign = x.s
-    } else {
-      resultSign = this.isFirstBigger(x, y) ? x.s : y.s
-    }
-
-    let lengthDiff = xd.length - yd.length
-
-    // 배열 보정
-    while (lengthDiff !== 0) {
-      if (lengthDiff < 0) {
-        // xd의 자릿수 조정
-        xd.unshift(0)
-      } else if (lengthDiff > 0) {
-        // yd의 자릿수 조정
-        yd.unshift(0)
-      }
-      lengthDiff = xd.length - yd.length
-    }
-
-    console.log('xd', xd)
-    console.log('yd', yd)
-
-    // for (let i = maxLength - 1; i >= 0; i--) {
-    //   console.log('i', i);
-
-    //   const xs = x.s < 0 ? -1 : 1;
-    //   const ys = y.s < 0 ? -1 : 1;
-
-    //   console.log('xd[i]', xd[i]);
-    //   console.log('xs', xs);
-    //   console.log('yd[i]', yd[i]);
-    //   console.log('ys', ys);
-
-    //   const sum = xs * (xd[i] || 0) + ys * (yd[i] || 0) + carry;
-
-    //   console.log('sum', sum);
-    //   console.log('carry', carry);
-    //   console.log('xs', xs);
-    //   console.log('ys', ys);
-    //   console.log('xd[i]', xd[i]);
-    //   console.log('yd[i]', yd[i]);
-
-    //   result.unshift(Math.abs(sum) % this.base);
-
-    //   console.log('result', result);
-    //   console.log('Math.abs(sum) % this.base', Math.abs(sum) % this.base);
-
-    //   const absSum = Math.abs(sum);
-
-    //   console.log('absSum', absSum);
-
-    //   // carry의 부호를 유지하면서 계산
-    //   if (sum < 0) {
-    //     console.log('sum < 0');
-    //     console.log('absSum / this.base', absSum / this.base);
-    //     carry = -Math.floor(absSum / this.base);
-    //     console.log('carry', carry);
-    //   } else {
-    //     console.log('sum >= 0');
-    //     console.log('absSum / this.base', absSum / this.base);
-    //     carry = Math.floor(absSum / this.base);
-    //     console.log('carry', carry);
-    //   }
-    // }
-
-    // if (carry > 0) {
-    //   result.unshift(carry);
-    // }
-    for (let i = maxLength - 1; i >= 0; i--) {
-      const xs = x.s < 0 ? -1 : 1
-      const ys = y.s < 0 ? -1 : 1
-      let currentSum = xs * (xd[i] || 0) + ys * (yd[i] || 0) + carry
-
-      if (xs !== ys) {
-        if (i === 0) {
-          // 최상위 자리: base 보정 없이 절대값만 취함
-          result.unshift(Math.abs(currentSum))
-          carry = 0
-        } else {
-          // 내부 자리: 기존 로직 유지
-          if (currentSum > 0) {
-            currentSum -= this.base
-            carry = 1
-          } else if (currentSum < 0) {
-            currentSum += this.base
-            carry = -1
-          }
-          result.unshift(Math.abs(currentSum % this.base))
-        }
-      } else {
-        // 같은 부호일 때(덧셈)
-        carry = Math.floor(currentSum / this.base)
-        result.unshift(Math.abs(currentSum % this.base))
-      }
-    }
-
-    return {
-      d: result,
-      e: newE,
-      s: resultSign,
-    }
+    // 결과 정규화
+    return this.normalizeResult(integerSum, decimalSum, maxDecimalPlaces, 1)
   }
 
   /**
@@ -367,84 +263,7 @@ export class Numbra implements NumbraDecimal {
    * @returns 뺄셈 결과 (NumbraDecimal 인터페이스)
    */
   private calculateSub(x: NumbraDecimal, y: NumbraDecimal): NumbraDecimal {
-    // 유효하지 않은 입력 체크
-    if (!x.d || !y.d) {
-      throw new Error('Invalid input')
-    }
-
-    // 덧셈 항등원(0) 체크
-    if (this.isZero(y)) return x
-    if (this.isZero(x)) return this.negate(y)
-
-    // 덧셈 역원 체크
-    if (this.isAdditiveInverse(x, y)) return { d: [0], e: 0, s: 1 }
-
-    const newE = Math.min(x.e, y.e)
-    let xd = [...x.d]
-    let yd = [...y.d]
-
-    if (x.e < y.e) {
-      // y의 자릿수 조정
-      const offsetY = y.e - newE
-      yd = this.adjustDigits(yd, offsetY)
-    } else if (y.e < x.e) {
-      // x의 자릿수 조정
-      const offsetX = x.e - newE
-      xd = this.adjustDigits(xd, offsetX)
-    }
-
-    const result: number[] = []
-    let borrow = 0 // 빌림
-
-    const maxLength = Math.max(xd.length, yd.length)
-
-    // 부호 처리 로직 수정
-    let resultSign = 1 // 기본값을 1로 설정
-
-    if (x.s === y.s) {
-      resultSign = x.s
-    } else {
-      resultSign = this.isFirstBigger(x, y) ? x.s : y.s
-    }
-
-    let lengthDiff = xd.length - yd.length
-
-    // 배열 보정
-    while (lengthDiff !== 0) {
-      if (lengthDiff < 0) {
-        // xd의 자릿수 조정
-        xd.unshift(0)
-      } else if (lengthDiff > 0) {
-        // yd의 자릿수 조정
-        yd.unshift(0)
-      }
-      lengthDiff = xd.length - yd.length
-    }
-
-    for (let i = maxLength - 1; i >= 0; i--) {
-      // 빌림 처리
-      let diff = xd[i] - yd[i] - borrow
-
-      if (diff < 0 && xd[i - 1] !== undefined) {
-        diff += 10000000
-        borrow = 1
-      } else {
-        borrow = 0
-      }
-
-      result.unshift(Math.abs(diff))
-    }
-
-    // 선행 0 제거
-    while (result[0] === 0 && result.length > 1) {
-      result.shift()
-    }
-
-    return {
-      d: result,
-      e: newE,
-      s: resultSign,
-    }
+    return this.calculateAdd(x, y)
   }
 
   /**
@@ -454,16 +273,9 @@ export class Numbra implements NumbraDecimal {
    * @returns 곱셈 결과 (NumbraDecimal 인터페이스)
    */
   private calculateMul(x: NumbraDecimal, y: NumbraDecimal): NumbraDecimal {
-    // 유효하지 않은 입력 체크
-    if (!x.d || !y.d) {
-      throw new Error('Invalid input')
-    }
-
-    // 곱셈 항등원(1) 체크
+    if (!x.d || !y.d) throw new Error('Invalid input')
     if (this.isOne(y)) return x
     if (this.isOne(x)) return y
-
-    // 0과의 곱셈 최적화
     if (this.isZero(x) || this.isZero(y)) return { d: [0], e: 0, s: 1 }
 
     const sign = x.s * y.s
@@ -504,8 +316,10 @@ export class Numbra implements NumbraDecimal {
    */
   private calculateDiv(x: NumbraDecimal, y: NumbraDecimal): NumbraDecimal {
     // 0 체크
-    if (!y.d || this.isZero(y)) throw new Error('Division by zero is not allowed')
+    if (!y.d || this.isZero(y))
+      throw new Error('Division by zero is not allowed')
     if (!x.d || this.isZero(x)) return { d: [0], e: 0, s: 1 }
+    if (equal(x, y)) return { d: [1], e: 0, s: 1 }
 
     // 분모가 1인 경우
     if (this.isOne(y)) return x
@@ -517,35 +331,60 @@ export class Numbra implements NumbraDecimal {
     // (예를 들어, 기본값이 10이면 10자리 정밀도, 테스트 예제에서 유효숫자 40이 필요하면 precision을 40으로 설정)
     const precision = this.precision
 
-    // 인스턴스에 설정된 base와 logBase (base = 10^7, logBase = 7)
-    const logBase = this.logBase
-    const base = this.base
+    // 간단한 나눗셈 처리 (직접 number 타입으로 계산)
+    if (
+      x.d.length === 1 &&
+      y.d.length === 1 &&
+      x.e === 0 &&
+      y.e === 0 &&
+      precision < 16
+    ) {
+      const xNum = x.d[0]
+      const yNum = y.d[0]
+      if (xNum < 1000000 && yNum < 1000000) {
+        // 간단한 나눗셈 처리 (직접 number 타입으로 계산)
+        const quotient = xNum / yNum
 
-    // ---------------------------
-    // 헬퍼 함수: d 배열을 BigInt 정수로 변환
-    const convertDigitsToBigInt = (digits: number[]): bigint => {
-      let result = 0n
-      const baseBigInt = 10n ** BigInt(logBase)
-      for (let i = 0; i < digits.length; i++) {
-        result = result * baseBigInt + BigInt(digits[i])
-      }
-      return result
-    }
+        // 정수부와 소수부 분리
+        const decimalStr = quotient.toString()
 
-    // 헬퍼 함수: BigInt를 base(10^7) 단위의 숫자 배열로 변환
-    const bigIntToDigitArray = (num: bigint): number[] => {
-      const resultArray: number[] = []
-      const baseBigInt = BigInt(base)
-      if (num === 0n) return [0]
-      while (num > 0n) {
-        const remainder = num % baseBigInt
-        // 앞쪽(상위 자리)부터 넣기 위해 unshift
-        resultArray.unshift(Number(remainder))
-        num = num / baseBigInt
+        if (decimalStr.includes('.')) {
+          // 소수점이 있는 경우
+          const [intPart, fracPart] = decimalStr.split('.')
+
+          // 정밀도에 맞게 소수부 자르기
+          const fracDigits = fracPart.slice(
+            0,
+            Math.min(fracPart.length, this.precision),
+          )
+
+          // 소수점의 위치에 따라 지수 계산
+          const resultExp = -fracDigits.length
+
+          // 결과 문자열 생성 (소수점 제거)
+          let resultStr = intPart + fracDigits
+
+          // 선행 0 제거 (중요!)
+          resultStr = resultStr.replace(/^0+/, '') || '0'
+
+          // 문자열을 숫자 배열로 변환
+          const resultDigits = toDigitChunks(resultStr)
+
+          return {
+            d: resultDigits,
+            e: resultExp,
+            s: resultSign,
+          }
+        } else {
+          // 정수인 경우 (소수점 없음)
+          return {
+            d: [Number(quotient)],
+            e: 0,
+            s: resultSign,
+          }
+        }
       }
-      return resultArray
     }
-    // ---------------------------
 
     // 1. d 배열을 BigInt 정수로 복원
     const I_x = convertDigitsToBigInt(x.d)
@@ -555,33 +394,50 @@ export class Numbra implements NumbraDecimal {
     //    나눗셈은 (I_x / I_y) × 10^(x.e - y.e)
     const expDiff = x.e - y.e
 
-    // 3. 스케일링: 원하는 소수점 이하 자릿수(precision)를 확보하기 위해 분자에 10^(precision)을 곱함.
-    //    (즉, 내부적으로 정수 나눗셈을 수행할 때 소수점 이하 정밀도를 확보)
-    const scaledNumerator = I_x * 10n ** BigInt(precision)
+    // 3. 캐시된 스케일 가져오기 (직접 계산 대신)
+    const precisionScale = getPrecisionScale(precision)
 
-    // 4. BigInt 정수 나눗셈: BigInt의 '/' 연산자는 정수 몫만 반환합니다.
+    // 4. 스케일링: 원하는 소수점 이하 자릿수(precision)를 확보하기 위해 분자에 10^(precision)을 곱함.
+    //    (즉, 내부적으로 정수 나눗셈을 수행할 때 소수점 이하 정밀도를 확보)
+    const scaledNumerator = I_x * precisionScale
+
+    // 5. BigInt 정수 나눗셈: BigInt의 '/' 연산자는 정수 몫만 반환합니다.
     let Q = scaledNumerator / I_y
 
-    // 5. 예비 결과 지수: 스케일링했으므로, 최종 결과는 Q × 10^(expDiff - precision)
+    // 6. 예비 결과 지수: 스케일링했으므로, 최종 결과는 Q × 10^(expDiff - precision)
     let resultExponent = expDiff - precision
 
-    // 6. 정규화: Q에 10의 인수가 남아 있다면 (즉, trailing zero가 있다면) 제거하고, 그만큼 결과 지수를 보정합니다.
-    while (Q % 10n === 0n && Q !== 0n) {
-      Q = Q / 10n
-      resultExponent += 1
+    // 7. 모듈로 연산 대신 문자열 변환으로 후행 0 제거 (최적화)
+    const qStr = Q.toString()
+    let trailingZeros = 0
+    for (let i = qStr.length - 1; i >= 0 && qStr[i] === '0'; i--) {
+      trailingZeros++
+    }
+    if (trailingZeros > 0) {
+      Q = Q / 10n ** BigInt(trailingZeros)
+      resultExponent += trailingZeros
     }
 
-    // 7. BigInt Q를 d 배열 (base 10^7 단위)로 분할
+    // 8. BigInt Q를 d 배열 (base 10^7 단위)로 분할
     const resultDigits = bigIntToDigitArray(Q)
 
-    // (옵션) 선행 0 제거: 여러 자릿수를 갖는 경우 앞의 불필요한 0을 제거합니다.
-    while (resultDigits.length > 1 && resultDigits[0] === 0) {
-      resultDigits.shift()
+    // 선행 0 제거 최적화 (shift 연산 대신 인덱스 기반)
+    let startIdx = 0
+    while (startIdx < resultDigits.length - 1 && resultDigits[startIdx] === 0) {
+      startIdx++
     }
 
-    // 8. 최종 결과 반환
+    // 모든 자릿수가 0인 경우 처리
+    if (startIdx === resultDigits.length - 1 && resultDigits[startIdx] === 0) {
+      return { d: [0], e: 0, s: 1 }
+    }
+
+    const finalDigits =
+      startIdx > 0 ? resultDigits.slice(startIdx) : resultDigits
+
+    // 9. 최종 결과 반환
     return {
-      d: resultDigits,
+      d: finalDigits,
       e: resultExponent,
       s: resultSign,
     }
@@ -594,8 +450,10 @@ export class Numbra implements NumbraDecimal {
    * @param exp 거듭제곱할 지수 (number | string | Numbra)
    * @returns 거듭제곱 결과 (NumbraDecimal 인스턴스)
    */
-  private calculatePow(x: NumbraDecimal, exp: number | string | NumbraDecimal): NumbraDecimal {
-    // exp를 정수로 변환
+  private calculatePow(
+    x: NumbraDecimal,
+    exp: number | string | NumbraDecimal,
+  ): NumbraDecimal {
     let exponent: number
 
     if (typeof exp === 'number') {
@@ -603,25 +461,20 @@ export class Numbra implements NumbraDecimal {
     } else if (typeof exp === 'string') {
       exponent = parseInt(exp, 10)
     } else {
-      // exp가 Numbra 또는 Decimal인 경우,
       if (exp.e !== 0 || exp.d.length !== 1) {
-        throw new Error('Non-integer exponent is not supported in this implementation.')
+        throw new Error(
+          'Non-integer exponent is not supported in this implementation.',
+        )
       }
       exponent = exp.d[0] * exp.s
     }
 
-    // 음의 지수 처리: x^(-n) = 1 / (x^n)
     if (exponent < 0) {
-      // 먼저 양의 지수에 대해 거듭제곱을 계산
       const positivePow = this.calculatePow(x, -exponent)
-      // 1을 고정소수점 표현으로 나타낸 값 (즉, 1 = { d: [1], e: 0, s: 1 })
       const one: NumbraDecimal = { d: [1], e: 0, s: 1 }
-      // calculateDiv를 사용해 1 / (x^n)를 계산합니다.
       return this.calculateDiv(one, positivePow)
     }
 
-    // 여기부터는 exponent가 0 이상인 경우 (양의 정수 지수)
-    // 헬퍼: d 배열을 BigInt로 변환하는 함수
     const convertDigitsToBigInt = (digits: number[]): bigint => {
       let result = 0n
       const baseBigInt = 10n ** BigInt(this.logBase)
@@ -631,7 +484,6 @@ export class Numbra implements NumbraDecimal {
       return result
     }
 
-    // 헬퍼: BigInt를 d 배열 (base 10^7 단위)로 변환하는 함수
     const bigIntToDigitArray = (num: bigint): number[] => {
       const resultArray: number[] = []
       const baseBigInt = BigInt(this.base)
@@ -644,10 +496,8 @@ export class Numbra implements NumbraDecimal {
       return resultArray
     }
 
-    // 1. 밑 x의 d 배열을 BigInt 정수 I_x로 복원
     const I_x = convertDigitsToBigInt(x.d)
 
-    // 2. 반복 제곱법을 이용하여 I_x^exponent 계산
     let resultBigInt = 1n
     let baseBigInt = I_x
     let expBigInt = BigInt(exponent)
@@ -659,17 +509,12 @@ export class Numbra implements NumbraDecimal {
       expBigInt /= 2n
     }
 
-    // 3. 최종 지수 계산: x의 값은 I_x * 10^(x.e)이므로,
-    //    x^n = I_x^n * 10^(n * x.e)
     const resultExponent = exponent * x.e
 
-    // 4. 결과 부호: x.s^n (n이 짝수면 양수, 홀수이면 원래 부호)
     const resultSign = exponent % 2 === 0 ? 1 : x.s
 
-    // 5. BigInt 결과를 d 배열로 변환
     const resultDigits = bigIntToDigitArray(resultBigInt)
 
-    // 6. 최종 결과 반환
     return { d: resultDigits, e: resultExponent, s: resultSign }
   }
 
@@ -682,31 +527,22 @@ export class Numbra implements NumbraDecimal {
    * @returns n제곱근 결과 (NumbraDecimal)
    */
   private calculateNthRoot(x: NumbraDecimal, degree: number): NumbraDecimal {
-    // degree가 양의 정수가 아니면 에러 처리
     if (degree <= 0) {
       throw new Error('Only positive root degrees are supported.')
     }
 
-    // 음수에 대해서: 만약 degree가 짝수이면 허용하지 않고, 홀수이면 절대값으로 계산한 후 결과 부호를 -1로 설정
     if (x.s < 0) {
       if (degree % 2 === 0) {
         throw new Error('Even root of negative number is not supported.')
       }
-      // 음수이면 절대값으로 계산하고, 최종 부호는 -1로 설정
       x = { d: x.d, e: x.e, s: -1 }
     }
-    // x가 0이면 결과도 0
     if (this.isZero(x)) {
       return { d: [0], e: 0, s: 1 }
     }
 
-    // 원하는 소수점 이하 정밀도 (this.precision, 예: 10자리)
     const p = this.precision
 
-    // 스케일링:
-    // n제곱근을 구하기 위해 최소한 10^(n*p)의 정밀도가 필요하므로,
-    // totalScale = x.e + n*p + extra, 여기서 extra는 x.e + n*p가 음수일 경우 이를 보정하고,
-    // 또한 extra는 degree의 배수가 되도록 조정합니다.
     let extra = 0
     if (x.e + degree * p < 0) {
       extra = -(x.e + degree * p)
@@ -714,9 +550,8 @@ export class Numbra implements NumbraDecimal {
     if (extra % degree !== 0) {
       extra += degree - (extra % degree)
     }
-    const totalScale = x.e + degree * p + extra // 이제 totalScale ≥ 0, degree의 배수
+    const totalScale = x.e + degree * p + extra
 
-    // 헬퍼: d 배열을 BigInt 정수로 복원
     const convertDigitsToBigInt = (digits: number[]): bigint => {
       let result = 0n
       const baseBigInt = 10n ** BigInt(this.logBase)
@@ -726,7 +561,6 @@ export class Numbra implements NumbraDecimal {
       return result
     }
 
-    // 헬퍼: BigInt를 d 배열 (base 10^7 단위)로 변환
     const bigIntToDigitArray = (num: bigint): number[] => {
       const resultArray: number[] = []
       const baseBigInt = BigInt(this.base)
@@ -739,19 +573,15 @@ export class Numbra implements NumbraDecimal {
       return resultArray
     }
 
-    // 1. x의 d 배열을 BigInt 정수 I로 복원
     const I = convertDigitsToBigInt(x.d)
 
-    // 2. 스케일링: N = I * 10^(totalScale)
     const N = I * 10n ** BigInt(totalScale)
 
-    // 3. n제곱근을 구하는 함수 (Newton–Raphson 반복)
     const integerNthRoot = (num: bigint, n: number): bigint => {
       if (num < 0n) {
         throw new Error('Cannot compute root of negative number')
       }
       if (num < 2n) return num
-      // 초기 추정: 10^(자릿수/n)
       const numStr = num.toString()
       const initExp = BigInt(Math.ceil(numStr.length / n))
       let r = 10n ** initExp
@@ -763,7 +593,6 @@ export class Numbra implements NumbraDecimal {
         }
         if (rPow === 0n) break
         const r_next = (BigInt(n - 1) * r + num / rPow) / BigInt(n)
-        // 반복 종료 조건: 변화가 매우 작으면 종료 (여기서는 차이가 1 이하이면 종료)
         if (r > r_next ? r - r_next <= 1n : r_next - r <= 1n) {
           r = r_next
           break
@@ -773,30 +602,20 @@ export class Numbra implements NumbraDecimal {
       return r
     }
 
-    // 4. N의 n제곱근 정수 근사 R를 구함
     const R = integerNthRoot(N, degree)
 
-    // 5. 스케일 보정:
-    //    최종 값은 R / 10^(p + extra/degree)로 보정되어야 하며,
-    //    따라서 최종 고정소수점 지수는 totalScale/degree - (p + extra/degree)
     const divisor = 10n ** BigInt(p + extra / degree)
     const finalBigInt = R / divisor
     const resultExponent = totalScale / degree - (p + extra / degree)
 
-    // 6. 결과 부호: x가 음수이고 degree가 홀수이면 -1, 아니면 1.
-    const resultSign = x.s // 여기서 x.s가 이미 절대값으로 처리되어 있고, 부호는 그대로 적용
+    const resultSign = x.s
 
-    // 7. BigInt 결과를 d 배열로 변환하여 최종 NumbraDecimal 반환
     const resultDigits = bigIntToDigitArray(finalBigInt)
 
     return { d: resultDigits, e: resultExponent, s: resultSign }
   }
 
   // ================================ Utility ================================
-
-  private normalizeDigits(digits: number[], offset: number): number[] {
-    return offset === 0 ? [...digits] : this.adjustDigits([...digits], offset)
-  }
 
   /**
    * 부호 반전
@@ -835,40 +654,33 @@ export class Numbra implements NumbraDecimal {
    * output: [100, 0, 0, 0] = 100 * 10^21 + 0 * 10^14 + 0 * 10^7 + 0 = 1 * 10^23
    */
   private adjustDigits(d: number[], offset: number): number[] {
-    const result = [...d]
+    return adjustDigits(d, offset)
+  }
 
-    const quotient = Math.floor(offset / this.logBase)
-    const remainder = offset % this.logBase
-
-    // 10^(offset / this.logBase의 나머지) 만큼 result의 모든 요소에 곱함
-    for (let i = 0; i < result.length; i++) {
-      result[i] *= Math.pow(10, remainder)
-    }
-
-    // result[i]의 자릿수가 7자리를 넘어가면 넘어간 부분을 자릿수 올림(result[i-1]에 더함)
-    for (let i = 0; i < result.length; i++) {
-      if (result[i].toString().length > this.logBase) {
-        const overflow_length = result[i].toString().length - this.logBase
-        const overflow_str = result[i].toString().slice(0, overflow_length)
-
-        if (i === 0 || isNaN(result[i - 1])) {
-          // 배열 앞에 새로운 요소 추가
-          result.unshift(parseInt(overflow_str, 10))
-          i++ // 인덱스 조정
-        } else {
-          result[i - 1] += parseInt(overflow_str, 10)
+  /**
+   * 덧셈과 뺄셈의 특수 케이스를 처리하는 헬퍼 메서드
+   * Input Validation
+   * 항등원과 역원 체크
+   */
+  private handleSpecialCases(
+    x: NumbraDecimal | Numbra,
+    y: NumbraDecimal | Numbra,
+    isSubtraction: boolean = false,
+  ): NumbraDecimal | null {
+    if (!x.d || !y.d) throw new Error('Invalid input')
+    if (this.isZero(x)) {
+      if (isSubtraction) {
+        if (y.d.length === 1 && y.d[0] === 0) {
+          return { d: [0], e: 0, s: 1 }
         }
-
-        result[i] = parseInt(result[i].toString().slice(overflow_length), 10)
+        return this.negate(y)
       }
+      return y
     }
+    if (this.isZero(y)) return x
+    if (this.isAdditiveInverse(x, y)) return { d: [0], e: 0, s: 1 }
 
-    // 10^(offset / this.logBase의 몫) 만큼 result에 0만 있는 요소를 추가
-    for (let i = 0; i < quotient; i++) {
-      result.push(0)
-    }
-
-    return result
+    return null // 특수 케이스가 아님
   }
 
   /**
@@ -879,71 +691,35 @@ export class Numbra implements NumbraDecimal {
   private parseInput(value: number | string): NumbraDecimal {
     this.isError(value)
 
-    let str = ''
+    const str = typeof value === 'number' ? value.toString() : value
+    const { sign, mantissa } = splitSignAndMantissa(str)
 
-    if (typeof value === 'number') {
-      str = value.toString()
-    } else {
-      str = value
-    }
-
-    // 부호 처리
-    let sign = 1
-    let numStr = str
-    if (str[0] === '-') {
-      sign = -1
-      numStr = str.slice(1)
-    } else if (str[0] === '+') {
-      numStr = str.slice(1)
-    }
-
-    // 소수점 처리
     let e = 0
     let parts: string[] = []
 
-    if (numStr.includes('e')) {
-      // e 표기법 처리
-      const [mantissa, exponent] = numStr.split('e')
-      const exp = parseInt(exponent, 10)
-
-      if (mantissa.includes('.')) {
-        // 1.234e1 같은 형태
-        const [intPart, decPart] = mantissa.split('.')
+    if (mantissa.includes('e')) {
+      const { mantissa: m, exponent: exp } = eNotationToDecimal(mantissa)
+      if (m.includes('.')) {
+        const [intPart, decPart] = m.split('.')
         parts = [intPart + decPart]
-        // 소수점 이동: 원래 소수점 위치에서 지수만큼 이동
         e = -decPart.length + exp
       } else {
-        // 1e-10 같은 형태
-        parts = [mantissa]
+        parts = [m]
         e = exp
       }
-    } else if (numStr.includes('.')) {
-      // 일반 소수점 형태 (예: 1.234)
-      parts = numStr.split('.')
+    } else if (mantissa.includes('.')) {
+      parts = mantissa.split('.')
       e = -parts[1].length
     } else {
-      // 정수 형태
-      parts = [numStr]
+      parts = [mantissa]
       e = 0
     }
 
-    numStr = parts[0] + (parts[1] || '')
-
-    // 앞의 0 제거
-    numStr = numStr.replace(/^0+/, '')
-    if (numStr === '') numStr = '0'
-
-    // 7자리씩 끊어서 배열로 변환 (끝에서부터)
-    const digits: number[] = []
-
-    for (let i = numStr.length; i > 0; i -= this.logBase) {
-      const start = Math.max(0, i - this.logBase)
-      const chunk = numStr.slice(start, i)
-      digits.unshift(parseInt(chunk, 10))
-    }
+    let numStr = parts[0] + (parts[1] || '')
+    numStr = numStr.replace(/^0+/, '') || '0'
 
     return {
-      d: digits,
+      d: toDigitChunks(numStr),
       e,
       s: sign,
     }
@@ -960,17 +736,14 @@ export class Numbra implements NumbraDecimal {
     let x = 0
     let y = 0
 
-    const _xd = xd
-    const _yd = yd
-
-    for (let i = 0; i < _xd.length; i++) {
-      const pow = (_xd.length - 1 - i) * this.logBase
-      x += _xd[i] * Math.pow(10, pow)
+    for (let i = 0; i < xd.length; i++) {
+      const pow = (xd.length - 1 - i) * this.logBase
+      x += xd[i] * Math.pow(10, pow)
     }
 
-    for (let i = 0; i < _yd.length; i++) {
-      const pow = (_yd.length - 1 - i) * this.logBase
-      y += _yd[i] * Math.pow(10, pow)
+    for (let i = 0; i < yd.length; i++) {
+      const pow = (yd.length - 1 - i) * this.logBase
+      y += yd[i] * Math.pow(10, pow)
     }
 
     const result = this.parseInput(x * y)
@@ -979,7 +752,7 @@ export class Numbra implements NumbraDecimal {
   }
 
   /**
-   * 카라추바 곱셈 연산
+   * 카라추바 곱셈 연산 (https://en.wikipedia.org/wiki/Karatsuba_algorithm)
    * @param xd 곱할 값
    * @param yd 곱할 값
    * @returns 곱셈 결과 (number[])
@@ -987,9 +760,8 @@ export class Numbra implements NumbraDecimal {
   private karatsubaMultiply(xd: number[], yd: number[]): number[] {
     const n = Math.max(xd.length, yd.length)
 
-    if (n < this.karatsubaThreshold) return this.standardMultiply(xd, yd)
-
-    if (n <= 1) return this.standardMultiply(xd, yd)
+    if (n < Math.max(2, this.karatsubaThreshold))
+      return this.standardMultiply(xd, yd)
 
     const paddedXd = [...xd]
     const paddedYd = [...yd]
@@ -1001,7 +773,6 @@ export class Numbra implements NumbraDecimal {
     const [a, b] = this.split(paddedXd, splitPoint)
     const [c, d] = this.split(paddedYd, splitPoint)
 
-    // m은 b의 실제 길이를 사용
     const m = b.length
 
     const e_ac = 2 * m * this.logBase
@@ -1016,24 +787,36 @@ export class Numbra implements NumbraDecimal {
 
     const abcd = this.karatsubaMultiply(abSum.d, cdSum.d)
 
-    const decimal_ac = this.calculateAdd({ d: [0], e: 0, s: 1 }, { d: ac, e: e_ac, s: 1 })
+    const decimal_ac = this.calculateAdd(
+      { d: [0], e: 0, s: 1 },
+      { d: ac, e: e_ac, s: 1 },
+    )
 
-    const decimal_bd = this.calculateAdd({ d: [0], e: 0, s: 1 }, { d: bd, e: e_bd, s: 1 })
+    const decimal_bd = this.calculateAdd(
+      { d: [0], e: 0, s: 1 },
+      { d: bd, e: e_bd, s: 1 },
+    )
 
     const decimal_middle = this.calculateSub(
       { d: abcd, e: 0, s: 1 },
-      this.calculateAdd({ d: ac, e: 0, s: 1 }, { d: bd, e: 0, s: 1 }),
+      this.negate(this.calculateAdd(decimal_ac, decimal_bd)),
     )
 
     const poweredZ2 = this.adjustDigits(decimal_ac.d, e_ac)
     const poweredZ0 = this.adjustDigits(decimal_bd.d, e_bd)
     const poweredZ1 = this.adjustDigits(decimal_middle.d, e_abcd)
 
-    const result = this.calculateAdd(this.calculateAdd({ d: poweredZ1, e: 0, s: 1 }, { d: poweredZ0, e: 0, s: 1 }), {
-      d: poweredZ2,
-      e: 0,
-      s: 1,
-    })
+    const result = this.calculateAdd(
+      this.calculateAdd(
+        { d: poweredZ1, e: 0, s: 1 },
+        { d: poweredZ0, e: 0, s: 1 },
+      ),
+      {
+        d: poweredZ2,
+        e: 0,
+        s: 1,
+      },
+    )
 
     return result.d
   }
@@ -1075,37 +858,31 @@ export class Numbra implements NumbraDecimal {
   private isError(x: NumbraValue): void {
     if (typeof x === 'number') {
       if (x === Number.POSITIVE_INFINITY || x === Number.NEGATIVE_INFINITY) {
-        // Infinity 체크
         throw new Error('Multiple of Infinity is not allowed')
       } else if (isNaN(x)) {
-        // NaN 체크
         throw new Error(`Invalid input: ${x}`)
       }
     } else if (x instanceof Numbra) {
-      // 배열 요소 체크
       for (let i = 0; i < x.d.length; i++) {
-        if (x.d[i] === Number.POSITIVE_INFINITY || x.d[i] === Number.NEGATIVE_INFINITY) {
-          // Infinity 체크
+        if (
+          x.d[i] === Number.POSITIVE_INFINITY ||
+          x.d[i] === Number.NEGATIVE_INFINITY
+        ) {
           throw new Error('Multiple of Infinity is not allowed')
         } else if (isNaN(x.d[i])) {
-          // NaN 체크
           throw new Error(`Invalid input: ${x.d[i]}`)
         }
       }
     } else if (typeof x === 'string') {
-      // 빈 문자열 체크
       if (x.trim() === '') {
         throw new Error('Empty string is not allowed')
       }
-      // 숫자 형식이 아닌 문자열 체크 (숫자, 소수점, 부호, e 표기법만 허용)
       if (!/^[-+]?(\d*\.?\d+|\d+\.?\d*)(e[-+]?\d+)?$/i.test(x)) {
         throw new Error(`Invalid number format: ${x}`)
       }
-      // Infinity 체크
       if (x === 'Infinity' || x === '-Infinity') {
         throw new Error('Multiple of Infinity is not allowed')
       }
-      // 숫자로 변환 시 NaN 체크
       if (isNaN(Number(x))) {
         throw new Error(`Invalid input: ${x}`)
       }
@@ -1118,7 +895,10 @@ export class Numbra implements NumbraDecimal {
    * @param y 체크할 값
    * @returns 덧셈 역원 여부 (boolean)
    */
-  private isAdditiveInverse(x: Numbra | NumbraDecimal, y: Numbra | NumbraDecimal): boolean {
+  private isAdditiveInverse(
+    x: Numbra | NumbraDecimal,
+    y: Numbra | NumbraDecimal,
+  ): boolean {
     const dx = this.toDecimal(x)
     const dy = this.toDecimal(y)
     return (
@@ -1142,25 +922,23 @@ export class Numbra implements NumbraDecimal {
     const tokens: string[] = []
     let currentNumber = ''
     let i = 0
-    const parenthesesStack: string[] = [] // 괄호 짝 검사를 위한 스택
+    const parenthesesStack: string[] = []
 
     while (i < equation.length) {
       const char = equation[i]
 
-      // sqrt 검사를 먼저 수행
       if (equation.slice(i, i + 4) === 'sqrt') {
         if (currentNumber) {
           tokens.push(currentNumber)
           currentNumber = ''
         }
         tokens.push('sqrt')
-        i += 4 // sqrt 길이만큼 건너뛰기
+        i += 4
         continue
       }
 
-      // 연산자나 괄호인 경우
       if (/[+\-*/()^]/.test(char)) {
-        // 괄호 짝 검사
+        // 소괄호 갯수 체크
         if (char === '(') {
           parenthesesStack.push(char)
         } else if (char === ')') {
@@ -1170,37 +948,41 @@ export class Numbra implements NumbraDecimal {
           parenthesesStack.pop()
         }
 
-        if (char === '-' && (tokens.length === 0 || /[+\-*/^(]/.test(tokens[tokens.length - 1]))) {
+        // 현재 숫자가 있으면 토큰으로 추가
+        if (currentNumber) {
+          tokens.push(currentNumber)
+          currentNumber = ''
+        }
+
+        // '-' 문자가 음수의 시작인지 연산자인지 판별
+        if (
+          char === '-' &&
+          (tokens.length === 0 || /[+\-*/^(]/.test(tokens[tokens.length - 1]))
+        ) {
+          // 음수의 시작으로 판단
           currentNumber = '-'
-          i++
-          continue
+        } else {
+          // 연산자로 판단하여 토큰 추가
+          tokens.push(char)
         }
-        if (currentNumber) {
-          tokens.push(currentNumber)
-          currentNumber = ''
-        }
-        tokens.push(char)
-      }
-      // 숫자나 소수점인 경우
-      else if (/[\d.]/.test(char)) {
+      } else if (/[\d.]/.test(char)) {
+        // 숫자나 소수점은 현재 숫자에 추가
         currentNumber += char
-      }
-      // 공백은 무시
-      else if (char === ' ') {
+      } else if (char === ' ') {
+        // 공백 처리: 현재 숫자가 있으면 토큰으로 추가
         if (currentNumber) {
           tokens.push(currentNumber)
           currentNumber = ''
         }
       }
+
       i++
     }
 
-    // 마지막 숫자가 있다면 추가
     if (currentNumber) {
       tokens.push(currentNumber)
     }
 
-    // 괄호 짝이 맞지 않는 경우 검사
     if (parenthesesStack.length > 0) {
       throw new Error('Invalid equation: Unmatched opening parenthesis')
     }
@@ -1238,34 +1020,30 @@ export class Numbra implements NumbraDecimal {
     const operatorStack: string[] = []
 
     for (const token of tokens) {
-      // 숫자인 경우 바로 출력
       if (this.isNumericToken(token)) {
         output.push(token)
         continue
       }
 
-      // 함수나 특수 연산자 처리
       if (token === 'sqrt' || token === '|') {
         operatorStack.push(token)
         continue
       }
 
-      // 여는 괄호는 스택에 push
       if (token === '(') {
         operatorStack.push(token)
         continue
       }
 
-      // 닫는 괄호를 만나면 여는 괄호나 함수를 만날 때까지 pop
       if (token === ')') {
         while (operatorStack.length > 0) {
           const op = operatorStack[operatorStack.length - 1]
           if (op === '(') {
-            operatorStack.pop() // 여는 괄호 제거
-            // 함수가 있다면 출력
+            operatorStack.pop()
             if (
               operatorStack.length > 0 &&
-              (operatorStack[operatorStack.length - 1] === 'sqrt' || operatorStack[operatorStack.length - 1] === '|')
+              (operatorStack[operatorStack.length - 1] === 'sqrt' ||
+                operatorStack[operatorStack.length - 1] === '|')
             ) {
               output.push(operatorStack.pop()!)
             }
@@ -1276,7 +1054,6 @@ export class Numbra implements NumbraDecimal {
         continue
       }
 
-      // 일반 연산자 처리
       while (operatorStack.length > 0) {
         const topOperator = operatorStack[operatorStack.length - 1]
         if (topOperator === '(') break
@@ -1284,8 +1061,6 @@ export class Numbra implements NumbraDecimal {
         const currentPrecedence = this.getPrecedence(token)
         const topPrecedence = this.getPrecedence(topOperator)
 
-        // 현재 연산자의 우선순위가 스택 top의 우선순위보다 낮거나 같으면
-        // 스택 top을 출력
         if (currentPrecedence <= topPrecedence) {
           output.push(operatorStack.pop()!)
         } else {
@@ -1295,7 +1070,6 @@ export class Numbra implements NumbraDecimal {
       operatorStack.push(token)
     }
 
-    // 스택에 남은 연산자들을 모두 출력
     while (operatorStack.length > 0) {
       const operator = operatorStack.pop()!
       if (operator !== '(') {
@@ -1313,24 +1087,22 @@ export class Numbra implements NumbraDecimal {
     const stack: Numbra[] = []
 
     for (const token of tokens) {
-      // 숫자인 경우 Numbra 인스턴스로 변환하여 스택에 push
       if (!isNaN(Number(token))) {
         stack.push(new Numbra(token))
         continue
       }
 
-      // 단항 연산자/함수 처리
       if (token === '|' || token === '!' || token === 'sqrt') {
         const operand = stack.pop()
         if (!operand) throw new Error('Invalid expression')
 
         switch (token) {
           case '|':
-            // 절대값
-            stack.push(operand.s < 0 ? new Numbra(operand.toString().slice(1)) : operand)
+            stack.push(
+              operand.s < 0 ? new Numbra(operand.toString().slice(1)) : operand,
+            )
             break
           case '!':
-            // 팩토리얼 (추후 구현)
             throw new Error('Factorial not implemented yet')
           case 'sqrt':
             stack.push(operand.sqrt())
@@ -1339,7 +1111,6 @@ export class Numbra implements NumbraDecimal {
         continue
       }
 
-      // 이항 연산자 처리
       const b = stack.pop()
       const a = stack.pop()
       if (!a || !b) throw new Error('Invalid expression')
@@ -1358,7 +1129,6 @@ export class Numbra implements NumbraDecimal {
           stack.push(a.div(b))
           break
         case '%':
-          // 모듈로 연산 (나머지)
           stack.push(a.sub(b.mul(a.div(b).toString().split('.')[0])))
           break
         case '^':
@@ -1393,74 +1163,6 @@ export class Numbra implements NumbraDecimal {
   }
 
   /**
-   * 첫 번째 배열이 두 번째 배열보다 큰지 확인
-   * @param first 첫 번째 배열
-   * @param second 두 번째 배열
-   * @returns 첫 번째 배열이 두 번째 배열보다 큰지 여부 (boolean)
-   */
-  private isFirstBigger(first: NumbraDecimal, second: NumbraDecimal): boolean {
-    // 정수부, 소수부 분리
-    let firstInt = ''
-    let firstDec = ''
-    let secondInt = ''
-    let secondDec = ''
-
-    // first의 정수부/소수부 분리
-    const firstTotalDigits = first.d.length * 7 // 전체 자릿수
-    const firstDecimalPosition = firstTotalDigits + first.e // 소수점 위치
-    let firstCurrentPosition = 0
-
-    for (let i = 0; i < first.d.length; i++) {
-      const num = first.d[i].toString().padStart(7, '0')
-
-      for (let j = 0; j < num.length; j++) {
-        if (firstCurrentPosition < firstDecimalPosition) {
-          firstInt += num[j]
-        } else {
-          firstDec += num[j]
-        }
-        firstCurrentPosition++
-      }
-    }
-
-    // second의 정수부/소수부 분리
-    const secondTotalDigits = second.d.length * 7 // 전체 자릿수
-    const secondDecimalPosition = secondTotalDigits + second.e // 소수점 위치
-    let secondCurrentPosition = 0
-
-    for (let i = 0; i < second.d.length; i++) {
-      const num = second.d[i].toString().padStart(7, '0')
-
-      for (let j = 0; j < num.length; j++) {
-        if (secondCurrentPosition < secondDecimalPosition) {
-          secondInt += num[j]
-        } else {
-          secondDec += num[j]
-        }
-        secondCurrentPosition++
-      }
-    }
-
-    // 소수부 자릿수 보정
-    const maxDecimalLength = Math.max(firstDec.length, secondDec.length)
-    firstDec = firstDec.padEnd(maxDecimalLength, '0')
-    secondDec = secondDec.padEnd(maxDecimalLength, '0')
-
-    // 정수부 비교
-    if (BigInt(firstInt) > BigInt(secondInt)) {
-      return true
-    }
-
-    // 정수부가 같으면 소수부 비교
-    if (BigInt(firstInt) === BigInt(secondInt)) {
-      return BigInt(firstDec) > BigInt(secondDec)
-    }
-
-    // 모든 자리가 같으면 false 반환
-    return false
-  }
-
-  /**
    * 새로운 Numbra 인스턴스 생성
    * @param d 배열
    * @param e 지수
@@ -1484,43 +1186,38 @@ export class Numbra implements NumbraDecimal {
    * @param decimal 변환할 값
    * @returns 문자열
    */
-  private decimalToString(decimal: NumbraDecimal): string {
-    if (!decimal.d) return 'NaN'
+  private decimalToCalculable(decimal: NumbraDecimal): Calculable {
+    if (!decimal.d) return 'NaN' as Calculable
 
     const str = decimal.s < 0 ? '-' : ''
     let result = ''
 
-    // 각 배열 요소를 문자열로 변환
     for (let i = 0; i < decimal.d.length; i++) {
       let chunk = decimal.d[i].toString()
 
-      // 첫 번째 요소가 아니면 7자리로 패딩
       if (i > 0) {
         chunk = chunk.padStart(7, '0')
       }
       result += chunk
     }
 
-    // 지수에 따른 소수점 처리
     if (decimal.e !== 0) {
       const len = result.length
 
       if (decimal.e > 0) {
-        // 양수 지수: 뒤에 0 추가
         result = result.padEnd(len + decimal.e, '0')
       } else {
-        // 음수 지수: 소수점 추가
         const insertPos = result.length + decimal.e
         if (insertPos <= 0) {
-          // 0.0xxx 형태
           result = '0.' + '0'.repeat(-insertPos) + result
         } else {
-          // xx.xxx 형태
           result = result.slice(0, insertPos) + '.' + result.slice(insertPos)
         }
       }
     }
-    return str + result
+
+    // Brand 타입으로 변환하여 반환
+    return (str + result) as Calculable
   }
 
   private toDecimal(value: Numbra | NumbraDecimal): NumbraDecimal {
@@ -1531,9 +1228,74 @@ export class Numbra implements NumbraDecimal {
     return value instanceof Numbra
   }
 
+  private normalizeResult(
+    integerPart: bigint,
+    decimalPart: bigint,
+    decimalPlaces: number,
+    sign: number,
+  ): NumbraDecimal {
+    const decimalBase = 10n ** BigInt(decimalPlaces)
+
+    // 결과 부호 결정
+    let resultSign = sign
+    let finalInteger = integerPart
+    let finalDecimal = decimalPart
+
+    // 소수부가 음수인 경우 처리
+    if (decimalPart < 0n) {
+      if (integerPart <= 0n) {
+        // 정수부가 음수/0인 경우: 두 부분 모두 음수로 처리
+        resultSign = -1
+        finalInteger = -integerPart // 부호 반전
+        finalDecimal = -decimalPart // 부호 반전
+      } else {
+        // 정수부가 양수인 경우: 정수부에서 1 빌려와서 소수부 양수로 만듦
+        finalInteger = integerPart - 1n
+        finalDecimal = decimalBase + decimalPart // 소수부 양수화
+
+        // 결과 부호 처리
+        if (finalInteger < 0n) {
+          resultSign = -1
+          finalInteger = -finalInteger
+        }
+      }
+    }
+    // 소수부가 양수이고 정수부가 음수인 경우
+    else if (decimalPart > 0n && integerPart < 0n) {
+      resultSign = -1
+      finalInteger = -integerPart // 부호 반전
+
+      // 소수부가 0이 아니면 정수부에서 1 빌려와 소수부를 조정
+      if (decimalPart > 0n) {
+        finalInteger = finalInteger - 1n
+        finalDecimal = decimalBase - decimalPart
+      }
+    }
+    // 그 외의 경우: 올림 처리
+    else {
+      const carry = decimalPart / decimalBase
+      finalInteger = integerPart + carry
+      finalDecimal = decimalPart % decimalBase
+
+      // 결과 부호 처리
+      if (finalInteger < 0n) {
+        resultSign = -1
+        finalInteger = -finalInteger
+      }
+    }
+
+    // 결과를 NumbraDecimal 형태로 변환
+    const absInteger = finalInteger.toString()
+    const absDecimal = finalDecimal.toString().padStart(decimalPlaces, '0')
+    const resultStr =
+      (resultSign < 0 ? '-' : '') +
+      absInteger +
+      (decimalPlaces > 0 ? '.' + absDecimal : '')
+
+    return this.parseInput(resultStr)
+  }
+
   private static isNumericToken(token: string): boolean {
     return /^-?\d+(\.\d+)?$/.test(token)
   }
 }
-
-type NumbraValue = number | string | Numbra

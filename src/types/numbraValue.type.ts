@@ -1,3 +1,5 @@
 import { Numbra } from '../core/numbra'
 
-export type NumbraValue = number | string | Numbra
+import type { Calculable } from './calculable.type'
+
+export type NumbraValue = number | string | Numbra | Calculable
