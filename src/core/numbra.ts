@@ -475,27 +475,6 @@ export class Numbra implements NumbraDecimal {
       return this.calculateDiv(one, positivePow)
     }
 
-    const convertDigitsToBigInt = (digits: number[]): bigint => {
-      let result = 0n
-      const baseBigInt = 10n ** BigInt(this.logBase)
-      for (let i = 0; i < digits.length; i++) {
-        result = result * baseBigInt + BigInt(digits[i])
-      }
-      return result
-    }
-
-    const bigIntToDigitArray = (num: bigint): number[] => {
-      const resultArray: number[] = []
-      const baseBigInt = BigInt(this.base)
-      if (num === 0n) return [0]
-      while (num > 0n) {
-        const remainder = num % baseBigInt
-        resultArray.unshift(Number(remainder))
-        num = num / baseBigInt
-      }
-      return resultArray
-    }
-
     const I_x = convertDigitsToBigInt(x.d)
 
     let resultBigInt = 1n
@@ -551,27 +530,6 @@ export class Numbra implements NumbraDecimal {
       extra += degree - (extra % degree)
     }
     const totalScale = x.e + degree * p + extra
-
-    const convertDigitsToBigInt = (digits: number[]): bigint => {
-      let result = 0n
-      const baseBigInt = 10n ** BigInt(this.logBase)
-      for (let i = 0; i < digits.length; i++) {
-        result = result * baseBigInt + BigInt(digits[i])
-      }
-      return result
-    }
-
-    const bigIntToDigitArray = (num: bigint): number[] => {
-      const resultArray: number[] = []
-      const baseBigInt = BigInt(this.base)
-      if (num === 0n) return [0]
-      while (num > 0n) {
-        const remainder = num % baseBigInt
-        resultArray.unshift(Number(remainder))
-        num = num / baseBigInt
-      }
-      return resultArray
-    }
 
     const I = convertDigitsToBigInt(x.d)
 
