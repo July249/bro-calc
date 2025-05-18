@@ -8,6 +8,41 @@ describe('sub function', () => {
     expect(x1.sub(x2)).toMatchObject({ d: [1200], e: -2, s: 1 })
     expect(x1.sub(x2).toString()).toBe('12.00')
   })
+
+  it('덧셈의 항등원 (0)', () => {
+    const x1 = new Numbra(100000)
+    const x2 = new Numbra(0)
+    expect(x1.sub(x2)).toMatchObject({ d: [100000], e: 0, s: 1 })
+    expect(x1.sub(x2).toString()).toBe('100000')
+    const x3 = new Numbra(0)
+    const x4 = new Numbra(100000)
+    expect(x3.sub(x4)).toMatchObject({ d: [100000], e: 0, s: -1 })
+    expect(x3.sub(x4).toString()).toBe('-100000')
+    const x5 = new Numbra(0)
+    const x6 = new Numbra(0)
+    expect(x5.sub(x6)).toMatchObject({ d: [0], e: 0, s: 1 })
+    expect(x5.sub(x6).toString()).toBe('0')
+  })
+
+  it('덧셈의 역원', () => {
+    const x1 = new Numbra(100000)
+    const x2 = new Numbra(-100000)
+    expect(x1.sub(x2)).toMatchObject({ d: [0], e: 0, s: 1 })
+    expect(x1.sub(x2).toString()).toBe('0')
+    const x5 = new Numbra(1)
+    const x6 = new Numbra(-1)
+    expect(x5.sub(x6)).toMatchObject({ d: [0], e: 0, s: 1 })
+    expect(x5.sub(x6).toString()).toBe('0')
+    const x7 = new Numbra(-100000)
+    const x8 = new Numbra(100000)
+    expect(x7.sub(x8)).toMatchObject({ d: [0], e: 0, s: 1 })
+    expect(x7.sub(x8).toString()).toBe('0')
+    const x9 = new Numbra(-1)
+    const x10 = new Numbra(1)
+    expect(x9.sub(x10)).toMatchObject({ d: [0], e: 0, s: 1 })
+    expect(x9.sub(x10).toString()).toBe('0')
+  })
+
   it('different sign of arguments', () => {
     const x1 = new Numbra(12.34)
     const x2 = new Numbra(-0.34)
@@ -25,6 +60,18 @@ describe('sub function', () => {
     const x8 = new Numbra(5)
     expect(x7.sub(x8)).toMatchObject({ d: [2], e: 0, s: -1 })
     expect(x7.sub(x8).toString()).toBe('-2')
+    const x9 = new Numbra(5)
+    const x10 = new Numbra(-3)
+    expect(x9.sub(x10)).toMatchObject({ d: [8], e: 0, s: 1 })
+    expect(x9.sub(x10).toString()).toBe('8')
+    const x11 = new Numbra(5)
+    const x12 = new Numbra(3)
+    expect(x11.sub(x12)).toMatchObject({ d: [2], e: 0, s: 1 })
+    expect(x11.sub(x12).toString()).toBe('2')
+    const x13 = new Numbra(-5)
+    const x14 = new Numbra(-3)
+    expect(x13.sub(x14)).toMatchObject({ d: [2], e: 0, s: -1 })
+    expect(x13.sub(x14).toString()).toBe('-2')
   })
   it('even argument of sub function is over the Number.MIN_SAFE_INTEGER, it should be calculated correctly', () => {
     const x1 = new Numbra(Number.MIN_SAFE_INTEGER) // -9_007_199_254_740_991
@@ -70,7 +117,9 @@ describe('sub function', () => {
       e: -33,
       s: -1,
     })
-    expect(x1.sub(x2).toString()).toBe('-22128.346290933748009408327456820613687')
+    expect(x1.sub(x2).toString()).toBe(
+      '-22128.346290933748009408327456820613687',
+    )
   })
   it('93.6537090662519905916725431793863135 - 93.65370906625199059167254317938631349999999999 = 0.00000000000000000000000000000000000000000001', () => {
     const x1 = new Numbra('93.6537090662519905916725431793863135')
@@ -80,7 +129,9 @@ describe('sub function', () => {
       e: -44,
       s: 1,
     })
-    expect(x1.sub(x2).toString()).toBe('0.00000000000000000000000000000000000000000001')
+    expect(x1.sub(x2).toString()).toBe(
+      '0.00000000000000000000000000000000000000000001',
+    )
   })
   it('936537090662519905916.72543179386313 - 22222 = 936537090662519883694.72543179386313', () => {
     const x1 = new Numbra('936537090662519905916.72543179386313')

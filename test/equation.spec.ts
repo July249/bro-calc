@@ -13,7 +13,6 @@ describe('equation function', () => {
     expect(Numbra.equation('5+3')).toMatchObject({ d: [8], e: 0, s: 1 })
     expect(Numbra.equation('5+3').toString()).toBe('8')
   })
-
   it('equation function should handle subtraction correctly', () => {
     expect(Numbra.equation('10-4')).toMatchObject({ d: [6], e: 0, s: 1 })
     expect(Numbra.equation('10-4').toString()).toBe('6')
@@ -78,7 +77,9 @@ describe('equation function', () => {
       e: 0,
       s: 1,
     })
-    expect(Numbra.equation('123456789*987654321/123456789').toString()).toBe('987654321')
+    expect(Numbra.equation('123456789*987654321/123456789').toString()).toBe(
+      '987654321',
+    )
   })
 
   it('equation function should be able to chaining operations', () => {
@@ -113,6 +114,16 @@ describe('equation function', () => {
   })
 
   it('parentheses should be paired correctly', () => {
-    expect(() => Numbra.equation('(2+3*4')).toThrow('Invalid equation: Unmatched opening parenthesis')
+    expect(() => Numbra.equation('(2+3*4')).toThrow(
+      'Invalid equation: Unmatched opening parenthesis',
+    )
+  })
+
+  it('((123-123)/123)*100', () => {
+    expect(Numbra.equation('((123-123)/123)*100')).toMatchObject({
+      d: [0],
+      e: 0,
+      s: 1,
+    })
   })
 })

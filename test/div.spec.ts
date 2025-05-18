@@ -87,7 +87,7 @@ describe('div function', () => {
     })
     expect(x5.div(x6).toString()).toBe('0.166666666666666')
 
-    // custom precision is 15
+    // custom precision is 14
     const x7 = new Numbra(1, 14)
     const x8 = new Numbra(7, 14)
     expect(x7.div(x8)).toMatchObject({ d: [1428571, 4285714], e: -14, s: 1 })
@@ -118,6 +118,8 @@ describe('div function', () => {
       e: -30,
       s: 1,
     })
-    expect(x3.div(x4).toString()).toBe('124999998860937500015.488281238431396484519607543943')
+    expect(x3.div(x4).toString()).toBe(
+      '124999998860937500015.488281238431396484519607543943',
+    )
   })
 })

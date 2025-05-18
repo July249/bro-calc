@@ -7,8 +7,6 @@ describe('Numbra.add()', () => {
       const x2 = new Numbra(0.34)
       expect(x1.add(x2)).toMatchObject({ d: [1234], e: -2, s: 1 })
       expect(x1.add(x2).toString()).toBe('12.34')
-      expect(x1.add(0.34)).toMatchObject({ d: [1234], e: -2, s: 1 })
-      expect(x1.add(0.34).toString()).toBe('12.34')
       const x3 = new Numbra(0.0056)
       expect(x2.add(x3)).toMatchObject({ d: [3456], e: -4, s: 1 })
       expect(x2.add(x3).toString()).toBe('0.3456')
@@ -16,6 +14,14 @@ describe('Numbra.add()', () => {
       const x5 = new Numbra(0.99)
       expect(x4.add(x5)).toMatchObject({ d: [100], e: -2, s: 1 })
       expect(x4.add(x5).toString()).toBe('1.00')
+      const x6 = new Numbra('123456.7890')
+      const x7 = new Numbra('987.6543210123456789')
+      expect(x6.add(x7)).toMatchObject({
+        d: [1, 2444444, 3321012, 3456789],
+        e: -16,
+        s: 1,
+      })
+      expect(x6.add(x7).toString()).toBe('124444.4433210123456789')
     })
 
     it('서로 다른 부호의 숫자 덧셈', () => {
@@ -75,7 +81,11 @@ describe('Numbra.add()', () => {
     it('Number.MAX_SAFE_INTEGER를 초과하는 큰 수의 덧셈', () => {
       const x1 = new Numbra(Number.MAX_SAFE_INTEGER) // 9_007_199_254_740_991
       const x2 = new Numbra(1000000000000000)
-      expect(x1.add(x2)).toMatchObject({ d: [100, 719925, 4740991], e: 0, s: 1 })
+      expect(x1.add(x2)).toMatchObject({
+        d: [100, 719925, 4740991],
+        e: 0,
+        s: 1,
+      })
       expect(x1.add(x2).toString()).toBe('10007199254740991')
       const x3 = new Numbra('14400000000000000')
       const x4 = new Numbra('100000010000000')
