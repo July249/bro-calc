@@ -28,3 +28,6 @@ dist-ssr
 
 # DS_Store
 .DS_Store
+
+# Coverage
+coverage

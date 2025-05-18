@@ -7,11 +7,14 @@ import type { Config } from 'jest'
 const config: Config = {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  moduleNameMapper: pathsToModuleNameMapper(compilerOptions.paths, { prefix: '<rootDir>/' }),
-  testMatch: ['**/test/**/*.spec.ts', '**/test/**/*.test.ts'],
-  collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts', '!src/**/*.test.ts', '!src/**/*.spec.ts'],
+  moduleNameMapper: pathsToModuleNameMapper(compilerOptions.paths, {
+    prefix: '<rootDir>/',
+  }),
+  testMatch: ['**/*.test.ts', '**/*.spec.ts'],
+  collectCoverage: true,
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'json', 'html'],
+  coveragePathIgnorePatterns: ['/node_modules/', '/dist/', '/coverage/'],
   coverageThreshold: {
     global: {
       branches: 80,
@@ -20,6 +23,8 @@ const config: Config = {
       statements: 80,
     },
   },
+  testTimeout: 10000,
+  verbose: true,
 }
 
 export default config
